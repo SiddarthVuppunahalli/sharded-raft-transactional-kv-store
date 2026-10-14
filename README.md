@@ -4,7 +4,7 @@
 
 This project proposes a distributed key-value database that partitions keys into ranges and replicates each range with its own Raft consensus group (Multi-Raft). A metadata routing layer directs requests to the appropriate range leader and supports range splits and replica movement for horizontal scaling and shard balancing. Within a range, Raft provides leader election and durable log replication; quorum-backed reads and writes provide linearizable single-key operations while a majority of replicas is available. Multi-Version Concurrency Control (MVCC) keeps committed versions so transactions can read a consistent snapshot while other transactions write. For transactions spanning ranges, a durable coordinator uses two-phase commit (2PC) to record a single commit or abort decision across all participating Raft groups.
 
-The prototype will demonstrate replication, leader failover, range routing, concurrent transactions, and atomic cross-range writes. We will evaluate throughput, read and write latency, failover time, transaction completion, and correctness during node crashes and network partitions. The initial transaction isolation target is **snapshot isolation**; serializable cross-range transactions are outside the initial scope.
+The prototype will demonstrate replication, leader failover, range routing, concurrent transactions, and atomic cross-range writes. We will evaluate throughput, read and write latency, failover time, transaction completion, and correctness during node crashes and network partitions. Transaction isolation behavior will be specified and tested as part of the implementation.
 
 ## Business Value
 
