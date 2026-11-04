@@ -59,6 +59,10 @@ The MVP is divided into four implementation parts:
 
 Implement `go.etcd.io/raft/v3` so every key range owns an independent Raft state machine and replicated log.
 
+**Status: Completed**
+
+Implemented range descriptors, independent Raft groups, range-aware command routing, Raft election/heartbeat ticking, committed-command delivery, and tests for routing across independent ranges.
+
 ### Part 2: Pebble durable storage
 
 Integrate Pebble to durably store the Raft log, hard state, and actual key-value records.
