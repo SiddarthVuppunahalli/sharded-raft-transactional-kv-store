@@ -14,4 +14,3 @@ func (r RangeDescriptor) Contains(key string) bool {
 	}
 	return r.EndKey == "" || key < r.EndKey
 }
-}
