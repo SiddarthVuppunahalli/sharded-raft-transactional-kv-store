@@ -51,7 +51,7 @@ Each range has three replicas and commits through a Raft majority. The metadata 
 | Deployment | Docker Compose | Reproducible multi-node development and failure experiments |
 | Evaluation | Go tests and fault-injection scripts | Check transaction correctness, throughput, latency, and recovery under crashes and partitions |
 
-## MVP Scope: Raft and Durable Storage
+## MVP Scope: Raft and Durable Storage **MVP contribution by Mukesh**
 
 The MVP is divided into four implementation parts:
 
@@ -67,7 +67,7 @@ Implemented range descriptors, independent Raft groups, range-aware command rout
 
 Integrate Pebble to durably store the Raft log, hard state, and actual key-value records.
 
-**Status: Completed — MVP contribution by Mukesh**
+**Status: Completed**
 
 Implemented Pebble-backed Raft storage, durable HardState and log persistence, key-value record operations, restart recovery, and persistence tests.
 
