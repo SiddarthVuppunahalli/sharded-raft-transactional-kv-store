@@ -51,3 +51,27 @@ Each range has three replicas and commits through a Raft majority. The metadata 
 | Deployment | Docker Compose | Reproducible multi-node development and failure experiments |
 | Evaluation | Go tests and fault-injection scripts | Check transaction correctness, throughput, latency, and recovery under crashes and partitions |
 
+## MVP Scope: Raft and Durable Storage
+
+The MVP is divided into four implementation parts:
+
+### Part 1: Independent Raft state machines
+
+Implement `go.etcd.io/raft/v3` so every key range owns an independent Raft state machine and replicated log.
+
+**Status: Completed**
+
+Implemented range descriptors, independent Raft groups, range-aware command routing, Raft election/heartbeat ticking, committed-command delivery, and tests for routing across independent ranges.
+
+### Part 2: Pebble durable storage
+
+Integrate Pebble to durably store the Raft log, hard state, and actual key-value records.
+
+### Part 3: Single-group quorum operations
+
+Ensure a single Raft group can elect a leader, replicate log entries to a quorum, and commit basic single-key reads and writes.
+
+### Part 4: Crash recovery
+
+Handle local node crash recovery by restoring Raft and key-value state from Pebble after restart.
+
