@@ -175,6 +175,11 @@ func (g *Group) handleReady(ctx context.Context, ready raft.Ready) error {
 		if err != nil {
 			return fmt.Errorf("decode committed command at index %d: %w", entry.Index, err)
 		}
+		if stateMachine, ok := g.storage.(interface{ Apply(Command) error }); ok {
+			if err := stateMachine.Apply(command); err != nil {
+				return fmt.Errorf("apply range %d command at index %d: %w", g.descriptor.ID, entry.Index, err)
+			}
+		}
 		select {
 		case g.applied <- Applied{RangeID: g.descriptor.ID, Index: entry.Index, Term: entry.Term, Command: command}:
 		case <-ctx.Done():
