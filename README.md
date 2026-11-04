@@ -67,6 +67,10 @@ Implemented range descriptors, independent Raft groups, range-aware command rout
 
 Integrate Pebble to durably store the Raft log, hard state, and actual key-value records.
 
+**Status: Completed — MVP contribution by Mukesh**
+
+Implemented Pebble-backed Raft storage, durable HardState and log persistence, key-value record operations, restart recovery, and persistence tests.
+
 ### Part 3: Single-group quorum operations
 
 Ensure a single Raft group can elect a leader, replicate log entries to a quorum, and commit basic single-key reads and writes.
