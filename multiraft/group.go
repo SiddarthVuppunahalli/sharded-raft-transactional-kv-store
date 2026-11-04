@@ -149,8 +149,14 @@ func (g *Group) handleReady(ctx context.Context, ready raft.Ready) error {
 			}
 		}
 	}
-	if !raft.IsEmptyHardState(ready.HardState) || len(ready.Entries) > 0 {
-		if err := g.storage.Append(ready.Entries); err != nil {
+	if len(ready.Entries) > 0 {
+		persistent, ok := g.storage.(interface {
+			Append([]raftpb.Entry) error
+		})
+		if !ok {
+			return fmt.Errorf("range %d storage does not support raft log append", g.descriptor.ID)
+		}
+		if err := persistent.Append(ready.Entries); err != nil {
 			return fmt.Errorf("append range %d raft log: %w", g.descriptor.ID, err)
 		}
 	}
