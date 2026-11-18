@@ -75,6 +75,10 @@ Implemented Pebble-backed Raft storage, durable HardState and log persistence, k
 
 Ensure a single Raft group can elect a leader, replicate log entries to a quorum, and commit basic single-key reads and writes.
 
+**Status: Completed — MVP contribution by Mukesh**
+
+Implemented an in-memory Raft transport for local cluster execution, leader detection, committed key-value reads, and an integration test covering three-node leader election, quorum replication, and committed single-key writes.
+
 ### Part 4: Crash recovery
 
 Handle local node crash recovery by restoring Raft and key-value state from Pebble after restart.
