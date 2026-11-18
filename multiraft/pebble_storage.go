@@ -12,6 +12,7 @@ import (
 
 var (
 	hardStateKey = []byte("raft/hard-state")
+	confStateKey = []byte("raft/conf-state")
 	snapshotKey  = []byte("raft/snapshot")
 	lastIndexKey = []byte("raft/last-index")
 	entryPrefix  = []byte("raft/entry/")
@@ -51,7 +52,19 @@ func (s *PebbleStorage) InitialState() (raftpb.HardState, raftpb.ConfState, erro
 	if err := readProto(s.db, snapshotKey, &snapshot); err != nil {
 		return raftpb.HardState{}, raftpb.ConfState{}, err
 	}
-	return hardState, snapshot.Metadata.ConfState, nil
+	confState := snapshot.Metadata.ConfState
+	if len(confState.Voters) == 0 && len(confState.Learners) == 0 {
+		if err := readProto(s.db, confStateKey, &confState); err != nil {
+			return raftpb.HardState{}, raftpb.ConfState{}, err
+		}
+	}
+	return hardState, confState, nil
+}
+
+func (s *PebbleStorage) SetConfState(state raftpb.ConfState) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return writeProto(s.db, confStateKey, &state)
 }
 
 func (s *PebbleStorage) SetHardState(state raftpb.HardState) error {

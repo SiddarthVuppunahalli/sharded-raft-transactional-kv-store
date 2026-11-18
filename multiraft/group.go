@@ -41,6 +41,12 @@ func (t *MemoryTransport) Register(nodeID uint64, node raft.Node) error {
 	return nil
 }
 
+func (t *MemoryTransport) Unregister(nodeID uint64) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	delete(t.nodes, nodeID)
+}
+
 func (t *MemoryTransport) Send(ctx context.Context, message raftpb.Message) error {
 	if message.To == 0 {
 		return fmt.Errorf("raft message has no recipient")
@@ -128,6 +134,20 @@ func NewGroup(config GroupConfig) (*Group, error) {
 		storage:    config.Storage,
 		transport:  config.Transport,
 		applied:    config.Applied,
+	}
+	if len(config.Peers) > 0 {
+		if persistent, ok := config.Storage.(interface {
+			SetConfState(raftpb.ConfState) error
+		}); ok {
+			confState := raftpb.ConfState{}
+			for _, peer := range config.Peers {
+				confState.Voters = append(confState.Voters, peer.ID)
+			}
+			if err := persistent.SetConfState(confState); err != nil {
+				node.Stop()
+				return nil, fmt.Errorf("persist range %d membership: %w", config.Descriptor.ID, err)
+			}
+		}
 	}
 	if memoryTransport, ok := config.Transport.(*MemoryTransport); ok {
 		if err := memoryTransport.Register(config.NodeID, node); err != nil {
@@ -273,4 +293,7 @@ func (g *Group) Stop() {
 	}
 	g.closed = true
 	g.node.Stop()
+	if memoryTransport, ok := g.transport.(*MemoryTransport); ok {
+		memoryTransport.Unregister(g.nodeID)
+	}
 }

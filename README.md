@@ -83,3 +83,7 @@ Implemented an in-memory Raft transport for local cluster execution, leader dete
 
 Handle local node crash recovery by restoring Raft and key-value state from Pebble after restart.
 
+**Status: Completed — MVP contribution by Mukesh**
+
+Implemented local node stop/restart recovery from the same Pebble directory, including Raft hard state, log entries, membership metadata, and committed key-value records. The recovery test verifies that a restarted replica restores prior data and rejoins subsequent replication.
+
