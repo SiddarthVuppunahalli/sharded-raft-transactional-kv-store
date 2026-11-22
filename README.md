@@ -75,3 +75,16 @@ Ensure a single Raft group can elect a leader, replicate log entries to a quorum
 
 Handle local node crash recovery by restoring Raft and key-value state from Pebble after restart.
 
+
+## API, Infrastructure & Evaluation (Part 4)
+
+**Status: Completed.** Details in [4-API-Infra-Eval/README.md](4-API-Infra-Eval/README.md).
+
+- gRPC/Protobuf APIs ([`proto/kv/v1/kv.proto`](proto/kv/v1/kv.proto)) for client KV + transactions, the inter-node Raft transport, 2PC participants, and admin status
+- Docker Compose cluster (3 or 5 nodes) with crash, partition, and latency/loss fault injection ([`faults/`](faults))
+- Evaluation suite ([`eval/run_eval.sh`](eval/run_eval.sh)) measuring throughput, latency, failover time, linearizability, and transaction correctness under failures
+
+```bash
+docker compose up -d --build && docker compose run --rm tools kvctl wait-ready
+QUICK=1 eval/run_eval.sh     # results in results/<timestamp>/report.html
+```

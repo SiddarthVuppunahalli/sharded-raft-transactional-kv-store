@@ -1,0 +1,110 @@
+{
+  "label": "partition-leader-isolated",
+  "workload": "kv",
+  "concurrency": 16,
+  "duration_sec": 15.000887798,
+  "ok": 306268,
+  "errors": 0,
+  "throughput_ops_per_sec": 20416.658275441092,
+  "read": {
+    "count": 152990,
+    "mean_ms": 0.766248911693549,
+    "p50_ms": 0.607,
+    "p95_ms": 1.146,
+    "p99_ms": 1.543,
+    "max_ms": 2003.504
+  },
+  "write": {
+    "count": 153278,
+    "mean_ms": 0.7939807734965033,
+    "p50_ms": 0.608,
+    "p95_ms": 1.146,
+    "p99_ms": 1.533,
+    "max_ms": 2003.654
+  },
+  "max_unavailability_ms": 2001,
+  "max_unavailability_at_sec": 5.310757669,
+  "timeline": [
+    {
+      "t": 0,
+      "ok": 22988,
+      "errors": 0
+    },
+    {
+      "t": 1,
+      "ok": 26132,
+      "errors": 0
+    },
+    {
+      "t": 2,
+      "ok": 26842,
+      "errors": 0
+    },
+    {
+      "t": 3,
+      "ok": 26947,
+      "errors": 0
+    },
+    {
+      "t": 4,
+      "ok": 26153,
+      "errors": 0
+    },
+    {
+      "t": 5,
+      "ok": 6625,
+      "errors": 0
+    },
+    {
+      "t": 6,
+      "ok": 0,
+      "errors": 0
+    },
+    {
+      "t": 7,
+      "ok": 15268,
+      "errors": 0
+    },
+    {
+      "t": 8,
+      "ok": 22928,
+      "errors": 0
+    },
+    {
+      "t": 9,
+      "ok": 22467,
+      "errors": 0
+    },
+    {
+      "t": 10,
+      "ok": 21410,
+      "errors": 0
+    },
+    {
+      "t": 11,
+      "ok": 20898,
+      "errors": 0
+    },
+    {
+      "t": 12,
+      "ok": 22780,
+      "errors": 0
+    },
+    {
+      "t": 13,
+      "ok": 22713,
+      "errors": 0
+    },
+    {
+      "t": 14,
+      "ok": 22101,
+      "errors": 0
+    },
+    {
+      "t": 15,
+      "ok": 16,
+      "errors": 0
+    }
+  ],
+  "correctness": "n/a"
+}

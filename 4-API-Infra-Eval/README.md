@@ -1,0 +1,115 @@
+# Part 4: API, Infrastructure & Evaluation (Samhitha)
+
+This part covers the gRPC APIs, the Docker Compose cluster, fault injection, and the evaluation suite. You don't need Go or protoc on your machine, only Docker.
+
+| Checklist item | Status | Where |
+|---|---|---|
+| Typed gRPC/Protobuf APIs for client requests, inter-node Raft transport and transaction coordination | Done | [`proto/kv/v1/kv.proto`](../proto/kv/v1/kv.proto), generated code in [`api/kvpb`](../api/kvpb), Raft transport in [`transport/`](../transport), node server in [`server/`](../server), client library in [`client/`](../client) |
+| Docker Compose deployment for reproducible multi-node clusters with realistic network topologies | Done | [`docker-compose.yml`](../docker-compose.yml), [`deploy/docker-compose.5node.yml`](../deploy/docker-compose.5node.yml), [`Dockerfile`](../Dockerfile), WAN profile in [`faults/delay.sh`](../faults/delay.sh) |
+| Scripts that simulate node crashes, network partitions and delayed messages during active workloads | Done | [`faults/`](../faults) |
+| Test suite for throughput, read/write latency, failover time, and transaction correctness under failure | Done (the bank/txn check activates once Part 3 registers `Txn`) | [`cmd/kvbench`](../cmd/kvbench), [`eval/run_eval.sh`](../eval/run_eval.sh), [`eval/report.py`](../eval/report.py), [`server/cluster_test.go`](../server/cluster_test.go) |
+
+## Quick start
+
+```bash
+docker compose up -d --build                         # 3 nodes: kv1, kv2, kv3
+docker compose run --rm tools kvctl wait-ready
+docker compose run --rm tools kvctl put apple red
+docker compose run --rm tools kvctl get apple
+docker compose run --rm tools kvctl status           # ranges, leaders, terms, indexes
+```
+
+Run the full evaluation. Results go to `results/<timestamp>/`, including `summary.md`, `report.html`, and one JSON/log file per scenario:
+
+```bash
+eval/run_eval.sh               # full suite, ~15 min
+QUICK=1 eval/run_eval.sh       # ~8 min
+NODES=5 eval/run_eval.sh       # 5-node cluster
+SCENARIOS="failover partition" eval/run_eval.sh
+```
+
+Run the Go tests (Docker only, no local Go needed):
+
+```bash
+docker run --rm -v "$PWD":/src -w /src golang:1.25 go test -race ./...
+```
+
+Regenerate protobuf code after editing `kv.proto`:
+
+```bash
+scripts/genproto.sh
+```
+
+## Architecture of this layer
+
+```
+client (kvctl / kvbench / client pkg)
+   │  KV.Get/Put/Delete/Txn, Admin.Status       ← proto/kv/v1/kv.proto
+   ▼
+kvnode (server/)  ── one multiraft.Group per range ── StateMachine (in-memory now, Pebble/MVCC later)
+   │  RaftTransport.Send(batch of raftpb.Message tagged with range_id)
+   ▼
+peer kvnodes (transport/)
+```
+
+- **One connection per peer carries the traffic for every range.** Each Raft message is tagged with `range_id`. Sends are batched and asynchronous. If a peer is unreachable or its queue is full, messages are dropped (Raft retransmits) and the peer is reported with `ReportUnreachable`, so a dead node never blocks the Raft loop.
+- **Reads go through the Raft log.** That makes them linearizable even when a follower serves them. One effect: read throughput is about the same as write throughput. Adding ReadIndex/lease reads would be a good optimisation later.
+- **Errors map to gRPC codes.** No leader or a stopped node returns `UNAVAILABLE` (retryable). A commit timeout returns `DEADLINE_EXCEEDED`: the outcome is unknown and the write may still commit, and the linearizability checker models it that way.
+- **The client is range-aware.** It learns the range map and leaders from `Admin.Status`, sends each request to the range leader, and fails over to other nodes on retryable errors.
+
+## How the other parts plug in
+
+| Part | Hook | Notes |
+|---|---|---|
+| **1. Consensus & storage (Mukesh)** | `server.Config.StateMachine` (`Apply(rangeID, index, cmd)`), and pass a Pebble `raft.Storage` in `NewNode` | Today: `raft.NewMemoryStorage()` plus `MemoryStateMachine`. I added `Group.Step`, `Status`, `IsLeader`, `Leader`, `ReportUnreachable` and `Manager.Groups` to `multiraft` so the network transport can drive the groups, plus `Command.ReqID` so a node can match committed entries to waiting requests. |
+| **2. Sharding & metadata (Pranav)** | `RangeDescriptor`, `RoutingError` (`NOT_LEADER`, `KEY_OUT_OF_RANGE`, …) and `Timestamp` messages in the proto. The node currently routes with `multiraft.Manager.Lookup` over static splits (`KV_SPLITS`). | Replace the static splits with the metadata service, and fill `leader_hint` / `generation`. The client already refreshes its range map from `Admin.Status` after failures. |
+| **3. Transactions (Siddarth)** | Implement `server.TxnHandler` (client `Txn` RPC) and `kvpb.TxnParticipantServer` (`Prepare`, `Commit`, `Abort`, `QueryStatus`), then set them in `server.Config{Txn: ..., Participant: ...}` | Until then, `Txn` returns `UNIMPLEMENTED` and the bank scenario reports `SKIPPED`. Once registered, `eval/run_eval.sh` checks the money-conservation invariant with and without faults, with no further changes needed. |
+
+## Fault injection (`faults/`)
+
+All scripts act on the containers `kv1`…`kvN` (set `NODES=5` for the 5-node cluster).
+
+| Script | What it does |
+|---|---|
+| `crash.sh kv2` / `crash.sh leader [range]` | SIGKILL a node, or the current leader of a range |
+| `restart.sh kv2` / `restart.sh all` | Bring crashed nodes back |
+| `partition.sh isolate kv1` / `isolate leader [range]` | Cut one node off from all its peers (iptables) |
+| `partition.sh split "kv1 kv2" "kv3"` | Two-sided partition |
+| `partition.sh oneway kv1 kv2` | Asymmetric packet loss kv1 → kv2 |
+| `delay.sh kv2 100ms [jitter] [loss%]` / `delay.sh all …` | tc netem latency, jitter and loss |
+| `delay.sh wan` | Three-region topology (5 / 20 / 40 ms one-way, jitter, 0.1% loss) |
+| `heal.sh [kvN]` | Remove all partitions and netem rules |
+| `chaos.sh` | Random crash / partition / delay schedule for `DURATION` seconds (Jepsen-style nemesis) |
+
+Client traffic from the `tools` container is never blocked by partitions, so you can watch a partitioned cluster from outside.
+
+## Evaluation suite
+
+| Scenario | What it measures |
+|---|---|
+| `baseline` | Throughput and p50/p95/p99 latency for read-heavy (95/5), mixed (50/50) and write-heavy (5/95) workloads |
+| `scaling` | Throughput and latency as clients go from 1 to 64 |
+| `failover` | Leader crash and follower crash during load (throughput timeline, max unavailability window), plus repeated trials of `kvctl failover-probe` for fault → new leader → first successful write |
+| `partition` | Leader isolated, and a minority/majority split, during load |
+| `delay` | LAN, WAN-topology and lossy-network profiles |
+| `linearizability` | Unique-value read/write history checked with [porcupine](https://github.com/anishathalye/porcupine), clean and under `chaos.sh`. An HTML visualisation of the history is saved too. |
+| `bank` | Cross-range transfers through `Txn`; an auditor checks the total balance never changes (atomicity + snapshot isolation), clean and under chaos |
+
+**Max unavailability** is the longest interval in which no client operation succeeded. During a leader crash this is the client-visible failover time.
+
+## Sample results (3 nodes, QUICK run on an M-series Mac with Docker Desktop)
+
+Full data: [`sample-results/summary.md`](sample-results/summary.md). Download [`sample-results/report.html`](sample-results/report.html) and open it for charts.
+
+- **Throughput:** about 26k ops/s with 16 clients and about 49k ops/s with 64 clients. p50 latency is 0.6 ms and p99 is 1.4 ms on the local Docker network.
+- **Leader failover:** after a leader crash, a new leader is elected in 1.6 s on average (1.3–1.9 s) and writes resume within 1.7 s. With an isolated leader the figures are similar (1.5 s / 1.8 s). Clients see about 2 s with no successful operations. Zero failed client operations: the client retries through the outage.
+- **Follower crash:** also shows about a 2 s gap. Each node leads some range, so the "follower" of range 1 that gets crashed can be the leader of range 2.
+- **Network profiles:** 2 ms LAN takes p50 from 0.6 ms to 12 ms. The 3-region WAN gives p50 104 ms; 2% loss gives p99 300 ms.
+- **Linearizability:** porcupine verified about 234k operations without faults and about 241k operations under random crashes, partitions and delays. No violations found.
+- **Transactions:** `SKIPPED` until Part 3 registers the `Txn` handler.
+
+## Known limitations (depend on the other parts)
+
+- **State is in memory until Part 1 lands Pebble.** A restarted node rejoins and catches up from the leader's log, but a crash of every node loses data, and a restarted node forgets its Raft vote. In production that would be a safety issue, and Pebble's persisted HardState fixes it.
+- **Raft log snapshots/compaction aren't implemented.** The log grows in memory, so the eval runner restarts the cluster between scenarios.
+- **Ranges are static, from `KV_SPLITS`.** Range splits and replica movement come from Part 2.

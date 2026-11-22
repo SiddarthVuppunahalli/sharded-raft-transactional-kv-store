@@ -1,0 +1,110 @@
+{
+  "label": "delay-lan",
+  "workload": "kv",
+  "concurrency": 16,
+  "duration_sec": 15.01172859,
+  "ok": 20054,
+  "errors": 0,
+  "throughput_ops_per_sec": 1335.8887938700734,
+  "read": {
+    "count": 10028,
+    "mean_ms": 11.957135719984018,
+    "p50_ms": 11.844,
+    "p95_ms": 16.229,
+    "p99_ms": 17.988,
+    "max_ms": 25.277
+  },
+  "write": {
+    "count": 10026,
+    "mean_ms": 11.986642629164153,
+    "p50_ms": 11.854,
+    "p95_ms": 16.37,
+    "p99_ms": 18.536,
+    "max_ms": 25.238
+  },
+  "max_unavailability_ms": 17,
+  "max_unavailability_at_sec": 1.415856917,
+  "timeline": [
+    {
+      "t": 0,
+      "ok": 1348,
+      "errors": 0
+    },
+    {
+      "t": 1,
+      "ok": 1359,
+      "errors": 0
+    },
+    {
+      "t": 2,
+      "ok": 1332,
+      "errors": 0
+    },
+    {
+      "t": 3,
+      "ok": 1328,
+      "errors": 0
+    },
+    {
+      "t": 4,
+      "ok": 1304,
+      "errors": 0
+    },
+    {
+      "t": 5,
+      "ok": 1347,
+      "errors": 0
+    },
+    {
+      "t": 6,
+      "ok": 1363,
+      "errors": 0
+    },
+    {
+      "t": 7,
+      "ok": 1365,
+      "errors": 0
+    },
+    {
+      "t": 8,
+      "ok": 1359,
+      "errors": 0
+    },
+    {
+      "t": 9,
+      "ok": 1328,
+      "errors": 0
+    },
+    {
+      "t": 10,
+      "ok": 1365,
+      "errors": 0
+    },
+    {
+      "t": 11,
+      "ok": 1381,
+      "errors": 0
+    },
+    {
+      "t": 12,
+      "ok": 1307,
+      "errors": 0
+    },
+    {
+      "t": 13,
+      "ok": 1336,
+      "errors": 0
+    },
+    {
+      "t": 14,
+      "ok": 1216,
+      "errors": 0
+    },
+    {
+      "t": 15,
+      "ok": 16,
+      "errors": 0
+    }
+  ],
+  "correctness": "n/a"
+}

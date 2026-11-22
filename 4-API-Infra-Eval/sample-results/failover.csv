@@ -1,0 +1,7 @@
+trial,fault,old_leader,new_leader,detect_to_leader_ms,fault_to_leader_ms,fault_to_first_write_ms
+1,crash,1,2,982,1279,1282
+1,isolate,1,2,0,1421,2428
+2,crash,1,2,1270,1557,2060
+2,isolate,2,1,0,1811,1813
+3,crash,2,1,1597,1889,1891
+3,isolate,3,2,0,1291,1292
