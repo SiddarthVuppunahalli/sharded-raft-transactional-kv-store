@@ -67,3 +67,16 @@ func (m *Manager) Stop() {
 		group.Stop()
 	}
 }
+
+// Groups returns a snapshot of every range group hosted on this node, ordered
+// by range ID.
+func (m *Manager) Groups() []*Group {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]*Group, 0, len(m.groups))
+	for _, g := range m.groups {
+		out = append(out, g)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Descriptor().ID < out[j].Descriptor().ID })
+	return out
+}
