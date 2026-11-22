@@ -1,0 +1,59 @@
+name: kvstore
+# 3-node cluster. Every node replicates every range (one Raft group per
+# range), so each range tolerates one node failure.
+#
+#   docker compose up -d --build
+#   docker compose run --rm tools kvctl status
+#
+# For 5 nodes: docker compose -f docker-compose.yml -f deploy/docker-compose.5node.yml up -d
+x-node: &node
+  build: .
+  image: kvstore:dev
+  restart: "no"
+  cap_add: [NET_ADMIN]        # needed for tc netem / iptables fault injection
+  environment: &node-env
+    KV_LISTEN: ":7000"
+    KV_PEERS: ${KV_PEERS:-1=kv1:7000,2=kv2:7000,3=kv3:7000}
+    KV_SPLITS: ${KV_SPLITS:-m}
+    KV_REQUEST_TIMEOUT: ${KV_REQUEST_TIMEOUT:-2s}
+  networks: [kvnet]
+
+services:
+  kv1:
+    <<: *node
+    container_name: kv1
+    hostname: kv1
+    environment: { <<: *node-env, KV_ID: "1" }
+    ports: ["7001:7000"]
+    networks: { kvnet: { ipv4_address: 172.28.0.11 } }
+  kv2:
+    <<: *node
+    container_name: kv2
+    hostname: kv2
+    environment: { <<: *node-env, KV_ID: "2" }
+    ports: ["7002:7000"]
+    networks: { kvnet: { ipv4_address: 172.28.0.12 } }
+  kv3:
+    <<: *node
+    container_name: kv3
+    hostname: kv3
+    environment: { <<: *node-env, KV_ID: "3" }
+    ports: ["7003:7000"]
+    networks: { kvnet: { ipv4_address: 172.28.0.13 } }
+
+  # Client container for kvctl / kvbench. It sits on the same network, so
+  # partitions between nodes do not cut the client off unless you ask.
+  tools:
+    image: kvstore:dev
+    profiles: [tools]
+    entrypoint: []
+    environment:
+      KV_ADDRS: ${KV_ADDRS:-kv1:7000,kv2:7000,kv3:7000}
+    volumes: ["./results:/results"]
+    networks: [kvnet]
+
+networks:
+  kvnet:
+    driver: bridge
+    ipam:
+      config: [{ subnet: 172.28.0.0/24 }]
