@@ -179,8 +179,8 @@ class MetadataStore:
 
     def snapshot(self) -> dict:
         with self.lock:
-            version, _, ranges = self.db.execute(
-                "SELECT version, last_applied, ranges FROM metadata_state WHERE id=1"
+            version, ranges = self.db.execute(
+                "SELECT version, ranges FROM metadata_state WHERE id=1"
             ).fetchone()
             return {"version": version, "ranges": json.loads(ranges)}
 
@@ -278,7 +278,7 @@ def apply_command(ranges: list[dict], version: int, command: dict) -> list[dict]
 
     range_id = int(command.get("rangeId", 0))
     updated = [dict(item) for item in ranges]
-    for item in updated:
+    for index, item in enumerate(updated):
         if item["id"] != range_id:
             continue
         if kind == "set_leader":
@@ -289,7 +289,7 @@ def apply_command(ranges: list[dict], version: int, command: dict) -> list[dict]
         else:
             raise MetadataError(f"unknown metadata command type {kind!r}")
         checked = prepare_range(item)
-        updated[updated.index(item)] = public_range(checked)
+        updated[index] = public_range(checked)
         return updated
     raise MetadataError(f"range {range_id} does not exist")
 

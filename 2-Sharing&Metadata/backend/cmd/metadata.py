@@ -5,14 +5,16 @@ from __future__ import annotations
 import base64
 import json
 import os
-import threading
 import urllib.error
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 from backend.sharing.metadata import MetadataError, MetadataStore, apply_command, decode_key, find_range
 from backend.sharing.raft import RaftNode, serve_raft
+
+COMPONENT_DIR = Path(__file__).resolve().parents[2]
 
 
 def parse_addresses(name: str, value: str) -> dict[int, str]:
@@ -52,9 +54,6 @@ def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int,
 
         def do_PUT(self):
             self.dispatch()
-
-        def do_OPTIONS(self):
-            self.send_error(405)
 
         def log_message(self, *_args):
             return
@@ -293,7 +292,10 @@ def run() -> None:
         raise ValueError("METADATA_HTTP_PEERS is required for clusters with multiple metadata replicas")
     range_nodes = parse_addresses("RANGE_NODES", os.environ["RANGE_NODES"]) if os.environ.get("RANGE_NODES") else {}
 
-    store = MetadataStore(os.environ.get("METADATA_DATA_DIR", "./data/metadata"))
+    data_dir = Path(os.environ.get("METADATA_DATA_DIR", "data/metadata"))
+    if not data_dir.is_absolute():
+        data_dir = COMPONENT_DIR / data_dir
+    store = MetadataStore(data_dir)
     node = RaftNode(node_id, peers, store)
     raft_server = serve_raft(node, listen_address(raft_address))
     node.start()

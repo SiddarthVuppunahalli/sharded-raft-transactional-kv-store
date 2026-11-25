@@ -126,8 +126,8 @@ class RaftNode:
             self.role = "leader"
             self.leader_id = self.id
             self.match_index = {peer_id: 0 for peer_id in self.peers}
-            self.match_index[self.id] = self.store.raft_state()[3]
             last_index = self.store.raft_state()[3]
+            self.match_index[self.id] = last_index
             self.next_index = {peer_id: last_index + 1 for peer_id in self.peers if peer_id != self.id}
             self.store.append_local(self.term, {"kind": "noop"})
             self.match_index[self.id] = last_index + 1

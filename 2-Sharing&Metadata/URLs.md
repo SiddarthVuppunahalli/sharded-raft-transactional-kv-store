@@ -2,9 +2,15 @@
 
 The backend is a Python service. Its HTTP API listens on `http://127.0.0.1:8080` by default. The browser frontend is a separate Python development server at `http://127.0.0.1:5173`; it serves `frontend/` and forwards `/api` calls to the backend.
 
+For the proposed full-project API, including transaction and internal service calls that are not implemented yet, see [EndProduct.md](EndProduct.md).
+
 ## Run locally
 
-Open two terminals from the repository root.
+Run the commands below inside `2-Sharing&Metadata`. From the repository root, enter this folder in each of two terminals:
+
+```powershell
+Set-Location -LiteralPath '.\2-Sharing&Metadata'
+```
 
 Backend:
 
@@ -19,6 +25,8 @@ py frontend/dev_server.py
 ```
 
 The default configuration runs a one-node metadata Raft group and stores its Raft log and applied range map in `data/metadata/metadata.sqlite3`. One node is useful for local development; it does not provide failure tolerance.
+
+The database path is relative to `2-Sharing&Metadata`. Relative `METADATA_DATA_DIR` values also resolve from this folder; absolute values are used as supplied.
 
 To run three metadata replicas, open three backend terminals and use the matching settings below. Keep the peer lists identical in every terminal; change the node ID, listen addresses, and data directory for each process.
 
