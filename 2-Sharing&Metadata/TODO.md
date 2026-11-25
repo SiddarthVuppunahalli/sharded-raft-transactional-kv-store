@@ -13,10 +13,12 @@ This checklist is limited to Pranav's Sharing & Metadata MVP: keep a durable ran
 
 ## Remaining MVP work
 
-- [ ] Add Python tests for range validation, metadata updates, routing retries, and persistence after restart.
-- [ ] Verify metadata replication and leader failover with three running metadata nodes.
-- [ ] Complete an end-to-end `GET` and `PUT` through the router when the range service is available.
-- [ ] Confirm routing errors and timeouts are shown clearly in the client and frontend.
+- [x] Add Python tests for range validation, metadata updates, routing retries, and persistence after restart.
+- [x] Verify three metadata nodes with separate SQLite stores and HTTP Raft listeners: replication, leader failover, and quorum loss.
+- [x] Verify binary GET/PUT through the frontend proxy and router using a test-only range HTTP fixture.
+- [ ] Repeat GET/PUT against the actual range Raft service when its receiver is available.
+- [x] Verify readable JSON errors through the client API and frontend proxy (400, 404, 413, 502, 503, 504).
+- [ ] Verify routing error display in a browser when a key-value UI is added; the current UI only displays metadata.
 
 ## Dependency outside Pranav's ownership
 
@@ -25,3 +27,7 @@ The range Raft service must provide `POST /_range/execute` and report its curren
 ## Deferred beyond this MVP
 
 Transaction/MVCC APIs, the 2PC coordinator, timestamp allocation, automatic range splitting, and automatic replica balancing are specified or described in [EndProduct.md](EndProduct.md), but are not part of this MVP checklist.
+
+## Run checks
+
+From this folder: `py -B -m unittest discover -s tests -v`. The tests use temporary databases and local HTTP listeners. The three-node test runs independent Raft instances in one process; separate-process crash testing remains additional coverage.

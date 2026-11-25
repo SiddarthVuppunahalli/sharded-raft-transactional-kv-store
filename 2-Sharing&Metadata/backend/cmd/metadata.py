@@ -5,6 +5,8 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -15,6 +17,12 @@ from backend.sharing.metadata import MetadataError, MetadataStore, apply_command
 from backend.sharing.raft import RaftNode, serve_raft
 
 COMPONENT_DIR = Path(__file__).resolve().parents[2]
+
+
+class APIError(Exception):
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status = status
 
 
 def parse_addresses(name: str, value: str) -> dict[int, str]:
@@ -44,7 +52,7 @@ def listen_address(value: str) -> tuple[str, int]:
     return (host or "0.0.0.0", int(port))
 
 
-def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int, str], range_nodes: dict[int, str]):
+def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int, str], range_nodes: dict[int, str], range_timeout: float = 5):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             self.dispatch()
@@ -62,16 +70,18 @@ def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int,
             if self.path == "/healthz":
                 self.send_bytes(200, b"ok\n", "text/plain; charset=utf-8")
                 return
-            if self.path.startswith("/api/") and not self.is_leader():
-                self.forward_to_leader()
-                return
             try:
+                if self.path.startswith("/api/") and not self.is_leader():
+                    self.forward_to_leader()
+                    return
                 if self.path.startswith("/api/metadata/"):
                     self.metadata_request()
                 elif self.path.startswith("/api/kv"):
                     self.kv_request()
                 else:
                     self.send_json(404, {"error": "endpoint not found"})
+            except APIError as exc:
+                self.send_json(exc.status, {"error": str(exc)})
             except (MetadataError, ValueError) as exc:
                 message = str(exc)
                 status = 409 if message.startswith("metadata version conflict") else 400
@@ -84,17 +94,19 @@ def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int,
                 return node.role == "leader"
 
         def forward_to_leader(self):
+            if self.headers.get("X-Metadata-Forwarded"):
+                raise APIError(503, "metadata leadership changed; retry the request")
             with node.lock:
                 leader_id = node.leader_id
             address = http_peers.get(leader_id) if leader_id else None
             if not address:
                 self.send_json(503, {"error": "metadata Raft leader is unknown"})
                 return
-            body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            body = self.read_body()
             request = urllib.request.Request(
                 f"http://{address}{self.path}",
                 data=body if self.command in ("POST", "PUT") else None,
-                headers={"Content-Type": self.headers.get("Content-Type", "application/json")},
+                headers={"Content-Type": self.headers.get("Content-Type", "application/json"), "X-Metadata-Forwarded": "1"},
                 method=self.command,
             )
             try:
@@ -102,7 +114,13 @@ def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int,
                     self.send_bytes(response.status, response.read(), response.headers.get("Content-Type", "application/octet-stream"))
             except urllib.error.HTTPError as response:
                 self.send_bytes(response.code, response.read(), response.headers.get("Content-Type", "application/json"))
-            except (OSError, urllib.error.URLError):
+            except TimeoutError:
+                raise APIError(504, "metadata leader request timed out")
+            except urllib.error.URLError as exc:
+                if isinstance(exc.reason, TimeoutError):
+                    raise APIError(504, "metadata leader request timed out") from exc
+                raise APIError(503, "metadata leader is unavailable") from exc
+            except OSError:
                 self.send_json(503, {"error": "metadata leader is unavailable"})
 
         def metadata_request(self):
@@ -159,10 +177,8 @@ def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int,
                 return
             key = decode_url_key(params["key"][0])
             operation = "get" if self.command == "GET" else "put"
-            value = self.rfile.read((1 << 20) + 1) if operation == "put" else b""
-            if len(value) > 1 << 20:
-                self.send_json(413, {"error": "value body exceeds 1 MiB"})
-                return
+            value = self.read_body() if operation == "put" else b""
+            deadline = time.monotonic() + range_timeout
             for _attempt in range(3):
                 node.read_barrier()
                 snapshot = store.snapshot()
@@ -171,6 +187,8 @@ def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int,
                     self.send_json(404, {"error": "no range contains the key"})
                     return
                 leader = descriptor["leaderId"]
+                if leader not in descriptor["replicaIds"]:
+                    raise APIError(503, "range has no known valid leader")
                 address = range_nodes.get(leader)
                 if not address:
                     self.send_json(503, {"error": f"range {descriptor['id']} leader {leader} has no configured endpoint"})
@@ -188,22 +206,36 @@ def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int,
                     headers={"Content-Type": "application/json"},
                     method="POST",
                 )
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise APIError(504, "range request timed out")
                 try:
-                    with urllib.request.urlopen(request, timeout=5) as response:
-                        result = json.loads(response.read() or b"{}")
-                except urllib.error.HTTPError as response:
-                    result = json.loads(response.read() or b"{}")
+                    try:
+                        response = urllib.request.urlopen(request, timeout=remaining)
+                    except urllib.error.HTTPError as exc:
+                        response = exc
+                    with response:
+                        response_status = response.code
+                        result = json.loads(response.read())
                 except TimeoutError:
-                    self.send_json(504, {"error": f"range request to leader {leader} timed out"})
-                    return
-                except (OSError, urllib.error.URLError):
-                    self.send_json(503, {"error": f"range leader {leader} is unavailable"})
-                    return
+                    raise APIError(504, f"range request to leader {leader} timed out")
+                except urllib.error.URLError as exc:
+                    if isinstance(exc.reason, TimeoutError):
+                        raise APIError(504, f"range request to leader {leader} timed out") from exc
+                    raise APIError(503, f"range leader {leader} is unavailable") from exc
+                except OSError as exc:
+                    raise APIError(503, f"range leader {leader} is unavailable") from exc
+                except ValueError as exc:
+                    raise APIError(502, "range service returned invalid JSON") from exc
 
+                if not isinstance(result, dict):
+                    raise APIError(502, "range service returned an invalid response")
                 error = result.get("error")
                 if error in ("stale_metadata", "not_leader"):
                     if error == "not_leader":
-                        new_leader = int(result.get("leaderId", 0))
+                        new_leader = result.get("leaderId", 0)
+                        if type(new_leader) is not int or new_leader < 0:
+                            raise APIError(502, "range service returned an invalid leader ID")
                         if new_leader == leader:
                             self.send_json(503, {"error": "range rejected its current leader record"})
                             return
@@ -220,23 +252,55 @@ def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int,
                         except ValueError:
                             pass  # Refresh the map; another router may have updated it.
                     continue
+                if response_status >= 400:
+                    status = response_status if response_status in (404, 409, 503, 504) else 502
+                    raise APIError(status, str(error or f"range service returned HTTP {response_status}"))
                 if error:
-                    self.send_json(503, {"error": str(error)})
-                elif operation == "put":
+                    raise APIError(503, str(error))
+                if type(result.get("found")) is not bool:
+                    raise APIError(502, "range service returned an invalid result")
+                if operation == "put" and not result["found"]:
+                    raise APIError(502, "range service did not confirm the write")
+                if operation == "put":
                     self.send_bytes(204, b"", "application/octet-stream")
                 elif not result.get("found", False):
                     self.send_json(404, {"error": "key does not exist"})
                 else:
-                    result_value = base64.b64decode(result.get("value", ""), validate=True)
+                    try:
+                        result_value = base64.b64decode(result["value"], validate=True)
+                    except (KeyError, ValueError, TypeError) as exc:
+                        raise APIError(502, "range service returned an invalid value") from exc
                     self.send_bytes(200, result_value, "application/octet-stream")
                 return
             self.send_json(503, {"error": "range routing retries exhausted"})
 
-        def read_json(self):
-            size = int(self.headers.get("Content-Length", "0"))
+        def read_body(self):
+            if self.headers.get("Transfer-Encoding"):
+                raise APIError(400, "send a Content-Length body; chunked requests are unsupported")
+            try:
+                size = int(self.headers.get("Content-Length", "0"))
+            except ValueError as exc:
+                raise APIError(400, "Content-Length must be a nonnegative integer") from exc
+            if size < 0:
+                raise APIError(400, "Content-Length must be a nonnegative integer")
             if size > 1 << 20:
-                raise ValueError("request body is too large")
-            body = json.loads(self.rfile.read(size))
+                # Drain a bounded excess so closing the socket does not discard
+                # the error response while the client is still sending its body.
+                if size <= 2 << 20:
+                    self.connection.settimeout(5)
+                    self.rfile.read(size)
+                raise APIError(413, "request body exceeds 1 MiB")
+            self.connection.settimeout(5)
+            try:
+                body = self.rfile.read(size)
+            except TimeoutError as exc:
+                raise APIError(408, "request body timed out") from exc
+            if len(body) != size:
+                raise APIError(400, "request body is incomplete")
+            return body
+
+        def read_json(self):
+            body = json.loads(self.read_body())
             if not isinstance(body, dict):
                 raise ValueError("request body must be one JSON object")
             return body
@@ -265,8 +329,8 @@ def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int,
 
 
 def decode_url_key(value: str) -> bytes:
-    if "=" in value:
-        raise ValueError("key must be unpadded base64url")
+    if re.fullmatch(r"[A-Za-z0-9_-]*", value) is None:
+        raise ValueError("key must be valid unpadded base64url")
     try:
         return base64.b64decode(value + "=" * (-len(value) % 4), altchars=b"-_", validate=True)
     except (ValueError, base64.binascii.Error) as exc:

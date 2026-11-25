@@ -198,17 +198,23 @@ def encode_key(value: bytes) -> str | None:
     return base64.b64encode(value).decode("ascii") if value else None
 
 
+def integer(value, name: str, minimum: int = 1) -> int:
+    if type(value) is not int or value < minimum:
+        raise MetadataError(f"{name} must be an integer >= {minimum}")
+    return value
+
+
 def prepare_range(item: dict) -> dict:
-    try:
-        range_id = int(item["id"])
-        start = decode_key(item.get("startKey"))
-        end = decode_key(item.get("endKey"))
-        replica_ids = [int(value) for value in item["replicaIds"]]
-        leader_id = int(item.get("leaderId", 0))
-    except (KeyError, TypeError, ValueError) as exc:
-        raise MetadataError("range requires id, replicaIds, and valid boundaries") from exc
-    if range_id <= 0 or not replica_ids or any(value <= 0 for value in replica_ids):
-        raise MetadataError("range and replica IDs must be greater than zero")
+    if not isinstance(item, dict):
+        raise MetadataError("each range must be a JSON object")
+    range_id = integer(item.get("id"), "range ID")
+    start = decode_key(item.get("startKey"))
+    end = decode_key(item.get("endKey"))
+    replica_ids = item.get("replicaIds")
+    if not isinstance(replica_ids, list) or not replica_ids:
+        raise MetadataError("replicaIds must be a nonempty list")
+    replica_ids = [integer(value, "replica ID") for value in replica_ids]
+    leader_id = integer(item.get("leaderId", 0), "leader ID", 0)
     if len(set(replica_ids)) != len(replica_ids):
         raise MetadataError(f"range {range_id} has duplicate replica IDs")
     if leader_id and leader_id not in replica_ids:
@@ -254,21 +260,30 @@ def public_range(item: dict) -> dict:
 
 
 def apply_command(ranges: list[dict], version: int, command: dict) -> list[dict]:
-    expected = command.get("expectedVersion")
-    if not isinstance(expected, int) or expected != version:
+    if not isinstance(command, dict):
+        raise MetadataError("metadata command must be a JSON object")
+    expected = integer(command.get("expectedVersion"), "expectedVersion", 0)
+    if expected != version:
         raise MetadataError(f"metadata version conflict: expected {expected}, current {version}")
 
     kind = command.get("type")
+    if kind not in ("replace_ranges", "set_leader", "set_replicas"):
+        raise MetadataError(f"unknown metadata command type {kind!r}")
     if kind == "replace_ranges":
         remove_ids = command.get("removeRangeIds", [])
-        if len(remove_ids) != len(set(remove_ids)) or any(int(value) <= 0 for value in remove_ids):
+        additions = command.get("ranges", [])
+        if not isinstance(remove_ids, list) or not isinstance(additions, list):
+            raise MetadataError("removeRangeIds and ranges must be lists")
+        remove_ids = [integer(value, "range ID to remove") for value in remove_ids]
+        if len(remove_ids) != len(set(remove_ids)):
             raise MetadataError("removeRangeIds must contain unique positive IDs")
+        if not remove_ids and not additions:
+            raise MetadataError("replace_ranges must remove or add at least one range")
         remaining = {item["id"]: item for item in ranges}
         for range_id in remove_ids:
-            if int(range_id) not in remaining:
+            if range_id not in remaining:
                 raise MetadataError(f"range {range_id} does not exist")
-            del remaining[int(range_id)]
-        additions = command.get("ranges", [])
+            del remaining[range_id]
         for item in additions:
             descriptor = prepare_range(item)
             if descriptor["id"] in remaining:
@@ -276,18 +291,16 @@ def apply_command(ranges: list[dict], version: int, command: dict) -> list[dict]
             remaining[descriptor["id"]] = public_range(descriptor)
         return validate_ranges(list(remaining.values()))
 
-    range_id = int(command.get("rangeId", 0))
+    range_id = integer(command.get("rangeId"), "rangeId")
     updated = [dict(item) for item in ranges]
     for index, item in enumerate(updated):
         if item["id"] != range_id:
             continue
         if kind == "set_leader":
-            item["leaderId"] = int(command.get("leaderId", 0))
+            item["leaderId"] = command.get("leaderId", 0)
         elif kind == "set_replicas":
-            item["replicaIds"] = [int(value) for value in command.get("replicaIds", [])]
-            item["leaderId"] = int(command.get("leaderId", 0))
-        else:
-            raise MetadataError(f"unknown metadata command type {kind!r}")
+            item["replicaIds"] = command.get("replicaIds", [])
+            item["leaderId"] = command.get("leaderId", 0)
         checked = prepare_range(item)
         updated[index] = public_range(checked)
         return updated

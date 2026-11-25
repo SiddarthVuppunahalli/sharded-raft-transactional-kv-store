@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 import os
+import json
 import urllib.error
 import urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 
-def main() -> None:
+def make_handler(backend: str, timeout: float = 8):
     directory = Path(__file__).resolve().parent
-    backend = os.environ.get("BACKEND_URL", "http://127.0.0.1:8080").rstrip("/")
 
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=str(directory), **kwargs)
+
+        def end_headers(self):
+            self.send_header("Cache-Control", "no-store")
+            super().end_headers()
 
         def do_GET(self):
             if self.path.startswith("/api/"):
@@ -43,12 +47,15 @@ def main() -> None:
                 method=self.command,
             )
             try:
-                with urllib.request.urlopen(request, timeout=8) as response:
+                with urllib.request.urlopen(request, timeout=timeout) as response:
                     status, content_type, payload = response.status, response.headers.get("Content-Type", "application/octet-stream"), response.read()
             except urllib.error.HTTPError as response:
                 status, content_type, payload = response.code, response.headers.get("Content-Type", "application/json"), response.read()
             except (OSError, urllib.error.URLError) as exc:
-                status, content_type, payload = 502, "application/json", ("{\"error\": " + repr(str(exc)) + "}").encode()
+                timed_out = isinstance(exc, TimeoutError) or isinstance(getattr(exc, "reason", None), TimeoutError)
+                status = 504 if timed_out else 502
+                message = "Backend request timed out. Try again." if timed_out else "Backend is unavailable. Check that it is running."
+                content_type, payload = "application/json", json.dumps({"error": message}).encode()
             self.send_response(status)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(payload)))
@@ -56,7 +63,12 @@ def main() -> None:
             if self.command != "HEAD":
                 self.wfile.write(payload)
 
-    server = ThreadingHTTPServer(("127.0.0.1", int(os.environ.get("FRONTEND_PORT", "5173"))), Handler)
+    return Handler
+
+
+def main() -> None:
+    backend = os.environ.get("BACKEND_URL", "http://127.0.0.1:8080").rstrip("/")
+    server = ThreadingHTTPServer(("127.0.0.1", int(os.environ.get("FRONTEND_PORT", "5173"))), make_handler(backend))
     print(f"Frontend: http://127.0.0.1:{server.server_port} (API -> {backend})", flush=True)
     try:
         server.serve_forever()

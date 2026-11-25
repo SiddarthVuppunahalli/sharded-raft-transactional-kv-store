@@ -183,3 +183,7 @@ Metadata replicas exchange JSON over HTTP at the configured `METADATA_PEERS` add
 ## Frontend
 
 The static browser application is in `frontend/`. Start it with `py frontend/dev_server.py`. It serves the page separately from the backend and proxies `/api/*` to `BACKEND_URL` (default `http://127.0.0.1:8080`).
+
+## MVP validation and error handling
+
+Run `py -B -m unittest discover -s tests -v` from this folder. Routing integration uses a test-only HTTP receiver, not the missing range Raft implementation. PUT bodies are read using Content-Length, with a 1 MiB limit. Requests to range replicas share a five-second routing budget and at most three attempts. Malformed upstream responses return 502; unavailable replicas return 503; timeouts return 504. The frontend proxy preserves these statuses and returns JSON when the backend is unavailable or times out.
