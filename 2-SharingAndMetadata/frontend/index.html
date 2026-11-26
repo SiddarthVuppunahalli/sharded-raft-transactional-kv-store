@@ -10,7 +10,6 @@
       <header class="page-header">
         <div>
           <p class="eyebrow">Sharing & Metadata</p>
-          <h1>Range metadata</h1>
           <p class="subtitle">Inspect the key ranges, replicas, and known leaders.</p>
         </div>
         <button id="refresh-button" type="button">Refresh</button>
@@ -18,10 +17,9 @@
 
       <p id="status" class="status" role="status">Loading metadata...</p>
 
-      <section class="panel">
-        <h2 id="lookup-heading">Find a key's range</h2>
+      <section>
         <form id="lookup-form">
-          <label for="key-input">Key (UTF-8 text)</label>
+          <label for="key-input">Key</label>
           <div class="lookup-row">
             <input id="key-input" name="key"/>
             <button type="submit">Find range</button>
