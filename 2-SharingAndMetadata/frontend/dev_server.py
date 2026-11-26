@@ -67,9 +67,9 @@ def make_handler(backend: str, timeout: float = 8):
 
 
 def main() -> None:
-    backend = os.environ.get("BACKEND_URL", "http://127.0.0.1:8080").rstrip("/")
-    server = ThreadingHTTPServer(("127.0.0.1", int(os.environ.get("FRONTEND_PORT", "5173"))), make_handler(backend))
-    print(f"Frontend: http://127.0.0.1:{server.server_port} (API -> {backend})", flush=True)
+    backend = os.environ.get("BACKEND_URL", "http://localhost:8080").rstrip("/")
+    server = ThreadingHTTPServer(("127.0.0.1", int(os.environ.get("FRONTEND_PORT", "3000"))), make_handler(backend))
+    print(f"Frontend: http://localhost:{server.server_port} (API -> {backend})", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -3,21 +3,8 @@ const versionElement = document.querySelector("#version");
 const rangesBody = document.querySelector("#ranges-body");
 const lookupResult = document.querySelector("#lookup-result");
 
-function formatBoundary(encodedKey, isStart) {
-  if (!encodedKey) return isStart ? "-infinity" : "+infinity";
-  return decodeBase64(encodedKey);
-}
-
-function decodeBase64(value) {
-  const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
-  return new TextDecoder().decode(Uint8Array.from(atob(padded), (character) => character.charCodeAt(0)));
-}
-
-function encodeKey(value) {
-  const bytes = new TextEncoder().encode(value);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+function formatBoundary(key, isStart) {
+  return key || (isStart ? "-infinity" : "+infinity");
 }
 
 function renderRanges(ranges) {
@@ -68,7 +55,7 @@ document.querySelector("#lookup-form").addEventListener("submit", async (event) 
   lookupResult.hidden = false;
   lookupResult.textContent = "Looking up key...";
   try {
-    const response = await fetch(`/api/metadata/lookup?key=${encodeKey(key)}`, {
+    const response = await fetch(`/api/metadata/lookup?key=${encodeURIComponent(key)}`, {
       headers: { Accept: "application/json" },
     });
     const data = await response.json();

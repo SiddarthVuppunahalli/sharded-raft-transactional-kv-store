@@ -1,4 +1,4 @@
-"""Small HTTP-transport Raft group for the metadata state machine."""
+"""Small HTTP-transport Raft group for durable state machines."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ class RaftNode:
         self.next_index = {peer_id: last_index + 1 for peer_id in peers if peer_id != node_id}
         self.election_deadline = 0.0
         self.last_heartbeat = 0.0
-        self.results: dict[int, str | None] = {}
+        self.results: dict[int, str | int | None] = {}
         self._reset_election_deadline()
         store.apply_committed()
 
@@ -136,6 +136,8 @@ class RaftNode:
 
     def _step_down(self, term: int) -> None:
         with self.lock:
+            if term < self.term:
+                return
             if term > self.term:
                 self.term = term
                 self.voted_for = None
@@ -261,12 +263,13 @@ class RaftNode:
             with self.lock:
                 if self.role != "leader":
                     return 0
+                round_term = self.term
                 peers = [peer for peer in self.peers if peer != self.id]
             with ThreadPoolExecutor(max_workers=max(1, len(peers))) as pool:
                 outcomes = list(pool.map(self._replicate_peer, peers))
             acknowledgments = 1 + sum(outcomes)
             with self.lock:
-                if self.role != "leader":
+                if self.role != "leader" or self.term != round_term:
                     return 0
                 last_index = self.store.raft_state()[3]
                 matches = {self.id: last_index, **self.match_index}
@@ -293,7 +296,7 @@ class RaftNode:
     def read_barrier(self) -> None:
         with self.lock:
             if self.role != "leader":
-                raise RuntimeError("metadata node is not the Raft leader")
+                raise RuntimeError("node is not the Raft leader")
             term = self.term
         acknowledgments = self.replicate_round()
         with self.lock:
@@ -302,24 +305,28 @@ class RaftNode:
                 for index in range(self.commit_index, 0, -1)
             )
             if self.role != "leader" or self.term != term:
-                raise RuntimeError("metadata leadership changed during read")
+                raise RuntimeError("Raft leadership changed during read")
             if acknowledgments < self.majority or not current_term_committed:
-                raise RuntimeError("metadata Raft majority is unavailable")
+                raise RuntimeError("Raft majority is unavailable")
 
-    def propose(self, command: dict) -> None:
+    def propose(self, command: dict) -> int | None:
         with self.proposal_lock:
             with self.lock:
                 if self.role != "leader":
-                    raise RuntimeError("metadata node is not the Raft leader")
+                    raise RuntimeError("node is not the Raft leader")
+                proposal_term = self.term
                 index = self.store.append_local(self.term, {"kind": "command", "command": command})
                 self.match_index[self.id] = index
             acknowledgments = self.replicate_round()
             with self.lock:
+                if self.role != "leader" or self.term != proposal_term:
+                    raise RuntimeError("Raft leadership changed; write outcome is unknown")
                 if acknowledgments < self.majority or self.commit_index < index:
-                    raise RuntimeError("metadata Raft majority is unavailable; command was not committed")
-                error = self.results.get(index)
-                if error:
-                    raise ValueError(error)
+                    raise RuntimeError("Raft majority is unavailable; write outcome is unknown")
+                result = self.results.pop(index, None)
+                if isinstance(result, str):
+                    raise ValueError(result)
+                return result
 
 
 def serve_raft(node: RaftNode, address: tuple[str, int]) -> ThreadingHTTPServer:

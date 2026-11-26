@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import json
 import sqlite3
 import threading
@@ -44,6 +43,10 @@ class MetadataStore:
                 ranges TEXT NOT NULL
             );
             INSERT OR IGNORE INTO metadata_state VALUES (1, 0, 0, '[]');
+            CREATE TABLE IF NOT EXISTS metadata_clock (
+                id INTEGER PRIMARY KEY CHECK (id = 1), timestamp INTEGER NOT NULL
+            );
+            INSERT OR IGNORE INTO metadata_clock VALUES (1, 0);
             """
         )
 
@@ -144,9 +147,9 @@ class MetadataStore:
                 (index,),
             )
 
-    def apply_committed(self) -> dict[int, str | None]:
+    def apply_committed(self) -> dict[int, str | int | None]:
         """Apply committed commands in order and persist each resulting snapshot."""
-        results: dict[int, str | None] = {}
+        results: dict[int, str | int | None] = {}
         with self.lock, self.db:
             commit = self.db.execute(
                 "SELECT commit_index FROM raft_meta WHERE id=1"
@@ -162,14 +165,18 @@ class MetadataStore:
                 if not row:
                     raise RuntimeError(f"committed Raft entry {index} is missing")
                 entry = json.loads(row[0])
-                error = None
+                result = None
                 if entry.get("kind") == "command":
                     try:
-                        ranges = apply_command(ranges, version, entry["command"])
-                        version += 1
+                        if entry["command"].get("type") == "next_timestamp":
+                            self.db.execute("UPDATE metadata_clock SET timestamp=timestamp+1 WHERE id=1")
+                            result = self.db.execute("SELECT timestamp FROM metadata_clock WHERE id=1").fetchone()[0]
+                        else:
+                            ranges = apply_command(ranges, version, entry["command"])
+                            version += 1
                     except MetadataError as exc:
-                        error = str(exc)
-                results[index] = error
+                        result = str(exc)
+                results[index] = result
                 self.db.execute(
                     "UPDATE metadata_state SET version=?, last_applied=?, ranges=? "
                     "WHERE id=1",
@@ -185,17 +192,13 @@ class MetadataStore:
             return {"version": version, "ranges": json.loads(ranges)}
 
 
-def decode_key(value: str | None) -> bytes:
-    if value in (None, ""):
-        return b""
-    try:
-        return base64.b64decode(value, validate=True)
-    except (TypeError, ValueError, base64.binascii.Error) as exc:
-        raise MetadataError("range boundaries must be standard base64") from exc
-
-
-def encode_key(value: bytes) -> str | None:
-    return base64.b64encode(value).decode("ascii") if value else None
+def boundary(value: str | None) -> str:
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise MetadataError("range boundaries must be text or null")
+    value.encode("utf-8")
+    return value
 
 
 def integer(value, name: str, minimum: int = 1) -> int:
@@ -208,8 +211,8 @@ def prepare_range(item: dict) -> dict:
     if not isinstance(item, dict):
         raise MetadataError("each range must be a JSON object")
     range_id = integer(item.get("id"), "range ID")
-    start = decode_key(item.get("startKey"))
-    end = decode_key(item.get("endKey"))
+    start = boundary(item.get("startKey"))
+    end = boundary(item.get("endKey"))
     replica_ids = item.get("replicaIds")
     if not isinstance(replica_ids, list) or not replica_ids:
         raise MetadataError("replicaIds must be a nonempty list")
@@ -223,8 +226,8 @@ def prepare_range(item: dict) -> dict:
         raise MetadataError(f"range {range_id} has an invalid key interval")
     return {
         "id": range_id,
-        "startKey": encode_key(start),
-        "endKey": encode_key(end),
+        "startKey": start or None,
+        "endKey": end or None,
         "replicaIds": replica_ids,
         "leaderId": leader_id,
         "_start": start,
@@ -307,10 +310,10 @@ def apply_command(ranges: list[dict], version: int, command: dict) -> list[dict]
     raise MetadataError(f"range {range_id} does not exist")
 
 
-def find_range(ranges: list[dict], key: bytes) -> dict | None:
+def find_range(ranges: list[dict], key: str) -> dict | None:
     for item in ranges:
-        start = decode_key(item.get("startKey"))
-        end = decode_key(item.get("endKey"))
+        start = boundary(item.get("startKey"))
+        end = boundary(item.get("endKey"))
         if key >= start and (not end or key < end):
             return item
     return None

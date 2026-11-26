@@ -1,0 +1,36 @@
+TEAM HANDOFF
+============
+Backend: https://crimmer.lol/be
+Frontend: https://crimmer.lol/fe/
+All keys, range boundaries and values are plain UTF-8 text.
+See URLs.txt for the seven supported API calls and metadata command bodies.
+
+MUKESH
+------
+Register ranges and report leaders using POST /api/metadata/commands.
+Provide POST /_range/execute on each configured range-node address.
+The router sends JSON:
+  {"operation":"put","rangeId":1,"key":"apple","value":"red","metadataVersion":1}
+For a read, operation is "get" and value is "".
+Return JSON:
+  GET found:     {"found":true,"value":"red"}
+  GET missing:   {"found":false}
+  PUT committed: {"found":true}
+  Wrong leader:  HTTP 409, {"error":"not_leader","leaderId":2}
+  Stale range:   HTTP 409, {"error":"stale_metadata"}
+  No quorum:     HTTP 503, {"error":"range unavailable"}
+Only acknowledge committed writes; reads need your Raft read barrier.
+
+SIDDARTH (PowerShell)
+--------------------
+Invoke-RestMethod 'https://crimmer.lol/be/internal/timestamps/next' -Method Post -ContentType 'application/json' -Body '{}'
+Returns {"timestamp":1}; use the returned integer.
+Invoke-RestMethod 'https://crimmer.lol/be/api/metadata/lookup?key=apple'
+Returns {"version":1,"range":{...}} to locate a participant.
+
+SAMHITHA (PowerShell)
+--------------------
+Invoke-RestMethod 'https://crimmer.lol/be/api/kv?key=apple'
+Returns the text value, or HTTP 404 if missing.
+Invoke-RestMethod 'https://crimmer.lol/be/api/kv?key=apple' -Method Put -ContentType 'text/plain; charset=utf-8' -Body 'red'
+Returns HTTP 204. GET/PUT requires Mukesh's running receiver.

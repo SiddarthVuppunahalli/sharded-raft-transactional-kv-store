@@ -2,15 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Sharded KV Metadata</title>
+    <title>Sharing & Metadata</title>
     <link rel="stylesheet" href="styles.css?v=plain" />
   </head>
   <body>
     <main class="page">
       <header class="page-header">
         <div>
-          <p class="eyebrow">Sharded KV Store</p>
+          <p class="eyebrow">Sharing & Metadata</p>
           <h1>Range metadata</h1>
           <p class="subtitle">Inspect the key ranges, replicas, and known leaders.</p>
         </div>
@@ -19,12 +18,12 @@
 
       <p id="status" class="status" role="status">Loading metadata...</p>
 
-      <section class="panel" aria-labelledby="lookup-heading">
+      <section class="panel">
         <h2 id="lookup-heading">Find a key's range</h2>
         <form id="lookup-form">
           <label for="key-input">Key (UTF-8 text)</label>
           <div class="lookup-row">
-            <input id="key-input" name="key" autocomplete="off" placeholder="e.g. customer-42" />
+            <input id="key-input" name="key"/>
             <button type="submit">Find range</button>
           </div>
         </form>

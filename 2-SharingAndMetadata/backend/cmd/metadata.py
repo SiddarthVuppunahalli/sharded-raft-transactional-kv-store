@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import base64
 import json
 import os
-import re
 import time
 import urllib.error
 import urllib.parse
@@ -13,7 +11,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from backend.sharing.metadata import MetadataError, MetadataStore, apply_command, decode_key, find_range
+from backend.sharing.metadata import MetadataError, MetadataStore, apply_command, find_range
 from backend.sharing.raft import RaftNode, serve_raft
 
 COMPONENT_DIR = Path(__file__).resolve().parents[2]
@@ -71,10 +69,18 @@ def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int,
                 self.send_bytes(200, b"ok\n", "text/plain; charset=utf-8")
                 return
             try:
-                if self.path.startswith("/api/") and not self.is_leader():
+                if self.path.startswith(("/api/", "/internal/")) and not self.is_leader():
                     self.forward_to_leader()
                     return
-                if self.path.startswith("/api/metadata/"):
+                if self.path == "/internal/timestamps/next":
+                    if self.command != "POST":
+                        self.method_not_allowed("POST")
+                        return
+                    if self.read_json() != {}:
+                        raise ValueError("timestamp request must be an empty JSON object")
+                    timestamp = node.propose({"type": "next_timestamp"})
+                    self.send_json(200, {"timestamp": timestamp})
+                elif self.path.startswith("/api/metadata/"):
                     self.metadata_request()
                 elif self.path.startswith("/api/kv"):
                     self.kv_request()
@@ -125,7 +131,7 @@ def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int,
 
         def metadata_request(self):
             path, _, query = self.path.partition("?")
-            params = urllib.parse.parse_qs(query, keep_blank_values=True)
+            params = urllib.parse.parse_qs(query, keep_blank_values=True, errors="strict")
             if path == "/api/metadata/ranges":
                 if self.command != "GET":
                     self.method_not_allowed("GET")
@@ -138,9 +144,9 @@ def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int,
                     self.method_not_allowed("GET")
                     return
                 if "key" not in params:
-                    self.send_json(400, {"error": "key is required as base64url in the key query parameter"})
+                    self.send_json(400, {"error": "key query parameter is required"})
                     return
-                key = decode_url_key(params["key"][0])
+                key = params["key"][0]
                 node.read_barrier()
                 snapshot = store.snapshot()
                 descriptor = find_range(snapshot["ranges"], key)
@@ -165,7 +171,7 @@ def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int,
 
         def kv_request(self):
             path, _, query = self.path.partition("?")
-            params = urllib.parse.parse_qs(query, keep_blank_values=True)
+            params = urllib.parse.parse_qs(query, keep_blank_values=True, errors="strict")
             if path != "/api/kv":
                 self.send_json(404, {"error": "endpoint not found"})
                 return
@@ -173,11 +179,11 @@ def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int,
                 self.method_not_allowed("GET, PUT")
                 return
             if "key" not in params:
-                self.send_json(400, {"error": "key is required as unpadded base64url in the key query parameter"})
+                self.send_json(400, {"error": "key query parameter is required"})
                 return
-            key = decode_url_key(params["key"][0])
+            key = params["key"][0]
             operation = "get" if self.command == "GET" else "put"
-            value = self.read_body() if operation == "put" else b""
+            value = self.read_body().decode("utf-8") if operation == "put" else ""
             deadline = time.monotonic() + range_timeout
             for _attempt in range(3):
                 node.read_barrier()
@@ -196,8 +202,8 @@ def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int,
                 payload = {
                     "operation": operation,
                     "rangeId": descriptor["id"],
-                    "key": base64.b64encode(key).decode(),
-                    "value": base64.b64encode(value).decode(),
+                    "key": key,
+                    "value": value,
                     "metadataVersion": snapshot["version"],
                 }
                 request = urllib.request.Request(
@@ -267,10 +273,10 @@ def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int,
                     self.send_json(404, {"error": "key does not exist"})
                 else:
                     try:
-                        result_value = base64.b64decode(result["value"], validate=True)
-                    except (KeyError, ValueError, TypeError) as exc:
+                        result_value = result["value"].encode("utf-8")
+                    except (KeyError, ValueError, AttributeError, TypeError) as exc:
                         raise APIError(502, "range service returned an invalid value") from exc
-                    self.send_bytes(200, result_value, "application/octet-stream")
+                    self.send_bytes(200, result_value, "text/plain; charset=utf-8")
                 return
             self.send_json(503, {"error": "range routing retries exhausted"})
 
@@ -328,15 +334,6 @@ def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int,
     return Handler
 
 
-def decode_url_key(value: str) -> bytes:
-    if re.fullmatch(r"[A-Za-z0-9_-]*", value) is None:
-        raise ValueError("key must be valid unpadded base64url")
-    try:
-        return base64.b64decode(value + "=" * (-len(value) % 4), altchars=b"-_", validate=True)
-    except (ValueError, base64.binascii.Error) as exc:
-        raise ValueError("key must be valid unpadded base64url") from exc
-
-
 def run() -> None:
     node_id = int(os.environ.get("METADATA_NODE_ID", "1"))
     if node_id <= 0:
@@ -362,7 +359,7 @@ def run() -> None:
     store = MetadataStore(data_dir)
     node = RaftNode(node_id, peers, store)
     raft_server = serve_raft(node, listen_address(raft_address))
-    node.start()
+    tick = node.start()
     http_server = ThreadingHTTPServer(
         listen_address(http_address), make_api_handler(node, store, http_peers, range_nodes)
     )
@@ -374,8 +371,10 @@ def run() -> None:
         pass
     finally:
         node.close()
-        http_server.shutdown()
+        tick.join()
+        http_server.server_close()
         raft_server.shutdown()
+        raft_server.server_close()
         store.close()
 
 

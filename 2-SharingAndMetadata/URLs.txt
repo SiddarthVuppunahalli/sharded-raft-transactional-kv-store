@@ -1,0 +1,96 @@
+URLS AND CONFIGURATION
+======================
+Frontend: https://crimmer.lol/fe/
+Backend base URL: https://crimmer.lol/be
+
+PUBLIC API
+----------
+GET  https://crimmer.lol/be/healthz
+     Returns : 200 : ok.
+
+GET  https://crimmer.lol/be/api/metadata/ranges
+     Returns : 200 : {"version":1,"ranges":[...]}.
+
+GET  https://crimmer.lol/be/api/metadata/lookup?key=apple
+     key: plain text, e.g. apple.
+     Returns 200 with {"version":1,"range":{...}}.
+
+POST https://crimmer.lol/be/api/metadata/commands
+     Body: JSON command with type, expectedVersion and command fields.
+     Returns 200 with the updated {"version":2,"ranges":[...]}.
+     Supported JSON bodies (use the current expectedVersion):
+     Register: {"type":"replace_ranges","expectedVersion":0,"ranges":[{"id":1,"startKey":null,"endKey":null,"replicaIds":[1,2,3],"leaderId":1}]}
+     Leader:   {"type":"set_leader","expectedVersion":1,"rangeId":1,"leaderId":2}
+     Replicas: {"type":"set_replicas","expectedVersion":2,"rangeId":1,"replicaIds":[1,2,4],"leaderId":2}
+     replace_ranges can include removeRangeIds to replace existing descriptors.
+     Boundaries are plain text, e.g. "m"; null means unbounded.
+     Ranges are [startKey,endKey) and must cover all keys without gaps.
+
+POST https://crimmer.lol/be/internal/timestamps/next
+     Body: {} with Content-Type: application/json.
+     Returns 200 with {"timestamp":1}; each allocation advances the counter.
+
+GET  https://crimmer.lol/be/api/kv?key=apple
+     key: plain text. Returns 200 with the UTF-8 text value.
+
+PUT  https://crimmer.lol/be/api/kv?key=apple
+     key: plain text. Body: UTF-8 text, up to 1 MiB.
+     Content-Type: text/plain; charset=utf-8. Returns 204 with no body.
+
+For spaces, &, + and Unicode in query keys, use normal URL escaping.
+The frontend handles this automatically. Keys and JSON values stay plain text.
+
+Errors use {"error":"message"}: 400 invalid input, 404 missing range/key,
+409 stale version, 413 body too large, 502 bad upstream response,
+503 unavailable leader/quorum, 504 timeout.
+
+QUICK EXAMPLES (PowerShell)
+--------------------------
+Invoke-RestMethod 'https://crimmer.lol/be/api/metadata/ranges'
+Invoke-RestMethod 'https://crimmer.lol/be/internal/timestamps/next' -Method Post -ContentType 'application/json' -Body '{}'
+
+RUN LOCALLY
+-----------
+Run inside 2-SharingAndMetadata, in separate terminals:
+
+Backend:   py -m backend.cmd.metadata
+Frontend:  py frontend/dev_server.py
+Caddy:     .\caddy.exe run --config .\caddyfile --adapter caddyfile
+
+Local backend: http://localhost:8080
+Local frontend: http://localhost:3000/
+Cloudflared sends crimmer.lol traffic to http://127.0.0.1:8000.
+Caddy removes /be or /fe and forwards to the appropriate local service.
+Keep the backend, frontend, Caddy and tunnel running for public access.
+The frontend's existing /api/* calls also reach the backend through Caddy.
+
+CONNECT THE RANGE SERVICE
+-------------------------
+Before starting the backend, set Mukesh's actual HTTP receiver addresses:
+
+$env:RANGE_NODES="1=localhost:8101,2=localhost:8102,3=localhost:8103"
+
+Each must serve POST /_range/execute; see HandOff.txt for the contract.
+GET/PUT needs a running range receiver and a registered range map.
+
+THREE METADATA REPLICAS (OPTIONAL)
+---------------------------------
+The default uses one replica. For three, run the following in three
+terminals, changing $replica to 1, 2 and 3:
+
+$replica=1
+$env:METADATA_NODE_ID="$replica"
+$env:METADATA_HTTP_ADDR="127.0.0.1:$(8079+$replica)"
+$env:METADATA_RAFT_ADDR="127.0.0.1:$(9089+$replica)"
+$env:METADATA_DATA_DIR="data/metadata-$replica"
+$env:METADATA_PEERS="1=127.0.0.1:9090,2=127.0.0.1:9091,3=127.0.0.1:9092"
+$env:METADATA_HTTP_PEERS="1=127.0.0.1:8080,2=127.0.0.1:8081,3=127.0.0.1:8082"
+py -m backend.cmd.metadata
+
+Use the same RANGE_NODES on all replicas and a separate data directory
+for each. Relative data paths resolve inside this component folder.
+Internal Raft calls: POST /_raft/vote and POST /_raft/append on Raft ports.
+Followers forward application requests to their known leader.
+
+Optional frontend settings: BACKEND_URL (default http://localhost:8080)
+and FRONTEND_PORT (default 3000). Local services do not use /be or /fe.

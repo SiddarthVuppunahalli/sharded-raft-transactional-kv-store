@@ -44,7 +44,7 @@ Each range has three replicas and commits through a Raft majority. The metadata 
 
 - `backend/` contains the Python metadata service, SQLite state machine, Raft HTTP transport, and client API.
 - `frontend/` contains the separate browser application and its Python development server.
-- `URLs.md` documents the API paths, inputs, responses, and current implementation status.
+- `2-SharingAndMetadata/URLs.txt` documents the API paths, inputs, responses, and current implementation status.
 
 ## Current Metadata Prototype Technology
 
@@ -55,5 +55,5 @@ Each range has three replicas and commits through a Raft majority. The metadata 
 | Metadata persistence | SQLite in WAL mode with synchronous writes | Durable Raft log and applied range map |
 | Frontend development server | Python standard library | Serves the browser UI separately and proxies API calls |
 
-The current Python prototype covers the metadata control plane. Range Raft services, MVCC, transactions, Docker deployment, and evaluation tooling remain project work. See [URLs.md](URLs.md) for commands and endpoint details.
+The current Python prototype covers the metadata control plane. Range Raft services, MVCC, transactions, Docker deployment, and evaluation tooling remain project work. See [URLs.txt](2-SharingAndMetadata/URLs.txt) for commands and endpoint details.
 
