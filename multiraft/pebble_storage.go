@@ -198,9 +198,27 @@ func (s *PebbleStorage) Apply(command Command) error {
 		return s.db.Set(key, command.Value, pebble.Sync)
 	case "delete", "del":
 		return s.db.Delete(key, pebble.Sync)
+	case "get":
+		// Reads are replicated through the log for linearizability but do
+		// not change state.
+		return nil
 	default:
 		return fmt.Errorf("unsupported command operation %q", command.Op)
 	}
+}
+
+// HasState reports whether this directory already holds Raft state from a
+// previous run, in which case the group must restart rather than bootstrap.
+func (s *PebbleStorage) HasState() (bool, error) {
+	hardState, _, err := s.InitialState()
+	if err != nil {
+		return false, err
+	}
+	last, err := s.LastIndex()
+	if err != nil {
+		return false, err
+	}
+	return !raft.IsEmptyHardState(hardState) || last > 0, nil
 }
 
 func (s *PebbleStorage) Get(key string) ([]byte, bool, error) {
