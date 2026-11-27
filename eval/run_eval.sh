@@ -7,7 +7,9 @@
 #   NODES=5 eval/run_eval.sh         5-node cluster
 #   SCENARIOS="baseline failover" eval/run_eval.sh   subset
 #
-# Scenarios: baseline scaling failover partition delay linearizability bank
+# Scenarios: baseline scaling failover partition delay linearizability bank router
+# ("router" runs workloads through the Part 2 metadata router over HTTP; it is
+# not in the default list because it needs the 2_SAM_Branch code.)
 set -euo pipefail
 source "$(dirname "$0")/../faults/lib.sh"
 
@@ -152,6 +154,28 @@ PY
     ( DURATION=$(( D - 5 )) INTERVAL=6 "$FAULTS_DIR/chaos.sh" > "$OUT/chaos-bank.log" 2>&1 ) &
     bench txn-bank-chaos --workload bank --duration "${D}s" --concurrency 8 --accounts 10
     wait
+    ;;
+  router)
+    reset_router() { reset_cluster; "$ROOT/deploy/router.sh" up >/dev/null; }
+    R="--http-url http://metadata:8080"
+    reset_router
+    log "scenario: mixed workload through the metadata router"
+    # shellcheck disable=SC2086
+    bench router-mixed50 $R --workload kv --duration "${D}s" --concurrency 16 --read-ratio 0.5
+    reset_router
+    log "scenario: leader crash through the metadata router"
+    ( sleep $(( D / 3 )); "$FAULTS_DIR/crash.sh" leader 1 >/dev/null
+      sleep $(( D / 3 )); "$FAULTS_DIR/restart.sh" all ) &
+    # shellcheck disable=SC2086
+    bench router-failover-leader-crash $R --workload kv --duration "${D}s" --concurrency 16 --read-ratio 0.5 --op-timeout 8s
+    wait
+    reset_router
+    log "scenario: linearizability through the router under random faults"
+    ( DURATION=$(( D * 2 - 5 )) INTERVAL=6 "$FAULTS_DIR/chaos.sh" > "$OUT/chaos-router.log" 2>&1 ) &
+    # shellcheck disable=SC2086
+    bench router-linearizability-chaos $R --workload linear --duration "$(( D * 2 ))s" --concurrency 8 --keys 8 --read-ratio 0.5 --op-timeout 8s
+    wait
+    "$ROOT/deploy/router.sh" down >/dev/null
     ;;
   *) log "unknown scenario $s" ;;
   esac
