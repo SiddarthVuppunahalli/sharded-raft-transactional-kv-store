@@ -1,0 +1,30 @@
+{
+  "label": "txn-bank-chaos",
+  "workload": "bank",
+  "concurrency": 8,
+  "duration_sec": 0,
+  "ok": 0,
+  "errors": 0,
+  "throughput_ops_per_sec": 0,
+  "read": {
+    "count": 0,
+    "mean_ms": 0,
+    "p50_ms": 0,
+    "p95_ms": 0,
+    "p99_ms": 0,
+    "max_ms": 0
+  },
+  "write": {
+    "count": 0,
+    "mean_ms": 0,
+    "p50_ms": 0,
+    "p95_ms": 0,
+    "p99_ms": 0,
+    "max_ms": 0
+  },
+  "max_unavailability_ms": 0,
+  "max_unavailability_at_sec": 0,
+  "timeline": [],
+  "correctness": "SKIPPED",
+  "details": "transaction layer (Txn RPC) not registered on the nodes yet"
+}

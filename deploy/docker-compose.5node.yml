@@ -1,0 +1,38 @@
+# Overlay for a 5-node cluster (each range tolerates two failures). Use with:
+#   export KV_PEERS=1=kv1:7000,2=kv2:7000,3=kv3:7000,4=kv4:7000,5=kv5:7000
+#   export KV_ADDRS=kv1:7000,kv2:7000,kv3:7000,kv4:7000,kv5:7000
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.5node.yml up -d --build
+# (eval/run_eval.sh does this for you with NODES=5)
+services:
+  kv4:
+    image: kvstore:dev
+    container_name: kv4
+    hostname: kv4
+    cap_add: [NET_ADMIN]
+    environment:
+      KV_ID: "4"
+      KV_LISTEN: ":7000"
+      KV_PEERS: ${KV_PEERS}
+      KV_SPLITS: ${KV_SPLITS:-m}
+      KV_REQUEST_TIMEOUT: ${KV_REQUEST_TIMEOUT:-2s}
+      KV_DATA_DIR: ${KV_DATA_DIR:-/data}
+      KV_HTTP_LISTEN: ":8080"
+      KV_METADATA_URL: ${KV_METADATA_URL:-http://metadata:8080}
+    ports: ["7004:7000", "8084:8080"]
+    networks: { kvnet: { ipv4_address: 172.28.0.14 } }
+  kv5:
+    image: kvstore:dev
+    container_name: kv5
+    hostname: kv5
+    cap_add: [NET_ADMIN]
+    environment:
+      KV_ID: "5"
+      KV_LISTEN: ":7000"
+      KV_PEERS: ${KV_PEERS}
+      KV_SPLITS: ${KV_SPLITS:-m}
+      KV_REQUEST_TIMEOUT: ${KV_REQUEST_TIMEOUT:-2s}
+      KV_DATA_DIR: ${KV_DATA_DIR:-/data}
+      KV_HTTP_LISTEN: ":8080"
+      KV_METADATA_URL: ${KV_METADATA_URL:-http://metadata:8080}
+    ports: ["7005:7000", "8085:8080"]
+    networks: { kvnet: { ipv4_address: 172.28.0.15 } }

@@ -297,3 +297,17 @@ func (g *Group) Stop() {
 		memoryTransport.Unregister(g.nodeID)
 	}
 }
+
+// Step delivers a Raft message received from a peer (via the network
+// transport) to this range's state machine.
+func (g *Group) Step(ctx context.Context, message raftpb.Message) error {
+	return g.node.Step(ctx, message)
+}
+
+// ReportUnreachable tells Raft a peer could not be contacted so it can pause
+// replication to it instead of flooding the transport.
+func (g *Group) ReportUnreachable(nodeID uint64) { g.node.ReportUnreachable(nodeID) }
+
+// Status exposes the Raft status (leader, term, commit index) for routing and
+// observability.
+func (g *Group) Status() raft.Status { return g.node.Status() }

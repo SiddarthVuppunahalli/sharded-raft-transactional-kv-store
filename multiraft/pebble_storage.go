@@ -198,9 +198,45 @@ func (s *PebbleStorage) Apply(command Command) error {
 		return s.db.Set(key, command.Value, pebble.Sync)
 	case "delete", "del":
 		return s.db.Delete(key, pebble.Sync)
+	case "get":
+		// Reads are replicated through the log for linearizability but do
+		// not change state.
+		return nil
 	default:
 		return fmt.Errorf("unsupported command operation %q", command.Op)
 	}
+}
+
+// HasState reports whether this directory already holds Raft state from a
+// previous run, in which case the group must restart rather than bootstrap.
+func (s *PebbleStorage) HasState() (bool, error) {
+	hardState, _, err := s.InitialState()
+	if err != nil {
+		return false, err
+	}
+	last, err := s.LastIndex()
+	if err != nil {
+		return false, err
+	}
+	return !raft.IsEmptyHardState(hardState) || last > 0, nil
+}
+
+// KVStats returns the number of applied key-value records and their total
+// key+value size in bytes, used to decide when a range should split.
+func (s *PebbleStorage) KVStats() (keys int, bytes int64, err error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	upper := append(append([]byte{}, kvPrefix[:len(kvPrefix)-1]...), kvPrefix[len(kvPrefix)-1]+1)
+	iter, err := s.db.NewIter(&pebble.IterOptions{LowerBound: kvPrefix, UpperBound: upper})
+	if err != nil {
+		return 0, 0, err
+	}
+	defer iter.Close()
+	for iter.First(); iter.Valid(); iter.Next() {
+		keys++
+		bytes += int64(len(iter.Key())-len(kvPrefix)) + int64(len(iter.Value()))
+	}
+	return keys, bytes, iter.Error()
 }
 
 func (s *PebbleStorage) Get(key string) ([]byte, bool, error) {

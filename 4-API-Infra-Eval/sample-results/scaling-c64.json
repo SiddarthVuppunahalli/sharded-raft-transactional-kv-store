@@ -1,0 +1,70 @@
+{
+  "label": "scaling-c64",
+  "workload": "kv",
+  "concurrency": 64,
+  "duration_sec": 7.000856128,
+  "ok": 344422,
+  "errors": 0,
+  "throughput_ops_per_sec": 49197.12585186267,
+  "read": {
+    "count": 172658,
+    "mean_ms": 1.2916433759223593,
+    "p50_ms": 1.175,
+    "p95_ms": 2.33,
+    "p99_ms": 3.194,
+    "max_ms": 22.738
+  },
+  "write": {
+    "count": 171764,
+    "mean_ms": 1.2933832758901902,
+    "p50_ms": 1.176,
+    "p95_ms": 2.326,
+    "p99_ms": 3.192,
+    "max_ms": 22.789
+  },
+  "max_unavailability_ms": 19,
+  "max_unavailability_at_sec": 3.078108209,
+  "timeline": [
+    {
+      "t": 0,
+      "ok": 43142,
+      "errors": 0
+    },
+    {
+      "t": 1,
+      "ok": 49258,
+      "errors": 0
+    },
+    {
+      "t": 2,
+      "ok": 49757,
+      "errors": 0
+    },
+    {
+      "t": 3,
+      "ok": 49516,
+      "errors": 0
+    },
+    {
+      "t": 4,
+      "ok": 50553,
+      "errors": 0
+    },
+    {
+      "t": 5,
+      "ok": 50859,
+      "errors": 0
+    },
+    {
+      "t": 6,
+      "ok": 51270,
+      "errors": 0
+    },
+    {
+      "t": 7,
+      "ok": 67,
+      "errors": 0
+    }
+  ],
+  "correctness": "n/a"
+}

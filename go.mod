@@ -1,16 +1,19 @@
 module github.com/SiddarthVuppunahalli/sharded-raft-transactional-kv-store
 
-go 1.23
+go 1.24.0
 
 require (
+	github.com/anishathalye/porcupine v1.3.1
 	github.com/cockroachdb/pebble v1.1.5
 	go.etcd.io/raft/v3 v3.6.0
+	google.golang.org/grpc v1.77.0
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
 	github.com/DataDog/zstd v1.4.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cockroachdb/errors v1.11.3 // indirect
 	github.com/cockroachdb/fifo v0.0.0-20240606204812-0bbfbd93a7ce // indirect
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b // indirect
@@ -31,7 +34,8 @@ require (
 	github.com/prometheus/procfs v0.9.0 // indirect
 	github.com/rogpeppe/go-internal v1.9.0 // indirect
 	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df // indirect
-	golang.org/x/sys v0.18.0 // indirect
-	golang.org/x/text v0.14.0 // indirect
-	google.golang.org/protobuf v1.33.0 // indirect
+	golang.org/x/net v0.46.1-0.20251013234738-63d1a5100f82 // indirect
+	golang.org/x/sys v0.37.0 // indirect
+	golang.org/x/text v0.30.0 // indirect
+	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect
 )

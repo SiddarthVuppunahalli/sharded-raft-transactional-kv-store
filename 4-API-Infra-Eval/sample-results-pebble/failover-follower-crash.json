@@ -1,0 +1,110 @@
+{
+  "label": "failover-follower-crash",
+  "workload": "kv",
+  "concurrency": 16,
+  "duration_sec": 15.018956091,
+  "ok": 10357,
+  "errors": 0,
+  "throughput_ops_per_sec": 689.5951980448466,
+  "read": {
+    "count": 5126,
+    "mean_ms": 22.555550136558765,
+    "p50_ms": 20.706,
+    "p95_ms": 37.66,
+    "p99_ms": 52.675,
+    "max_ms": 117.021
+  },
+  "write": {
+    "count": 5231,
+    "mean_ms": 23.79042152552092,
+    "p50_ms": 21.752,
+    "p95_ms": 40.125,
+    "p99_ms": 56.206,
+    "max_ms": 123.996
+  },
+  "max_unavailability_ms": 25,
+  "max_unavailability_at_sec": 12.918894423,
+  "timeline": [
+    {
+      "t": 0,
+      "ok": 748,
+      "errors": 0
+    },
+    {
+      "t": 1,
+      "ok": 805,
+      "errors": 0
+    },
+    {
+      "t": 2,
+      "ok": 739,
+      "errors": 0
+    },
+    {
+      "t": 3,
+      "ok": 745,
+      "errors": 0
+    },
+    {
+      "t": 4,
+      "ok": 666,
+      "errors": 0
+    },
+    {
+      "t": 5,
+      "ok": 532,
+      "errors": 0
+    },
+    {
+      "t": 6,
+      "ok": 849,
+      "errors": 0
+    },
+    {
+      "t": 7,
+      "ok": 894,
+      "errors": 0
+    },
+    {
+      "t": 8,
+      "ok": 870,
+      "errors": 0
+    },
+    {
+      "t": 9,
+      "ok": 841,
+      "errors": 0
+    },
+    {
+      "t": 10,
+      "ok": 633,
+      "errors": 0
+    },
+    {
+      "t": 11,
+      "ok": 552,
+      "errors": 0
+    },
+    {
+      "t": 12,
+      "ok": 429,
+      "errors": 0
+    },
+    {
+      "t": 13,
+      "ok": 476,
+      "errors": 0
+    },
+    {
+      "t": 14,
+      "ok": 562,
+      "errors": 0
+    },
+    {
+      "t": 15,
+      "ok": 16,
+      "errors": 0
+    }
+  ],
+  "correctness": "n/a"
+}

@@ -9,6 +9,9 @@ type Command struct {
 	Op    string `json:"op"`
 	Key   string `json:"key"`
 	Value []byte `json:"value,omitempty"`
+	// ReqID lets the proposing node match a committed entry back to the
+	// waiting client request. It is opaque to the state machine.
+	ReqID string `json:"req_id,omitempty"`
 }
 
 func marshalCommand(command Command) ([]byte, error) {

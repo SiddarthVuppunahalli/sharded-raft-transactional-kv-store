@@ -1,0 +1,110 @@
+{
+  "label": "router-mixed50",
+  "workload": "kv",
+  "concurrency": 16,
+  "duration_sec": 15.009818756,
+  "ok": 19527,
+  "errors": 0,
+  "throughput_ops_per_sec": 1300.9484203261488,
+  "read": {
+    "count": 9851,
+    "mean_ms": 11.643428484417845,
+    "p50_ms": 10.829,
+    "p95_ms": 15.733,
+    "p99_ms": 17.938,
+    "max_ms": 1064.227
+  },
+  "write": {
+    "count": 9676,
+    "mean_ms": 12.951827304671376,
+    "p50_ms": 11.518,
+    "p95_ms": 16.414,
+    "p99_ms": 18.907,
+    "max_ms": 1068.269
+  },
+  "max_unavailability_ms": 15,
+  "max_unavailability_at_sec": 9.768625212,
+  "timeline": [
+    {
+      "t": 0,
+      "ok": 959,
+      "errors": 0
+    },
+    {
+      "t": 1,
+      "ok": 1355,
+      "errors": 0
+    },
+    {
+      "t": 2,
+      "ok": 1338,
+      "errors": 0
+    },
+    {
+      "t": 3,
+      "ok": 1330,
+      "errors": 0
+    },
+    {
+      "t": 4,
+      "ok": 1339,
+      "errors": 0
+    },
+    {
+      "t": 5,
+      "ok": 1360,
+      "errors": 0
+    },
+    {
+      "t": 6,
+      "ok": 1330,
+      "errors": 0
+    },
+    {
+      "t": 7,
+      "ok": 1304,
+      "errors": 0
+    },
+    {
+      "t": 8,
+      "ok": 1329,
+      "errors": 0
+    },
+    {
+      "t": 9,
+      "ok": 1308,
+      "errors": 0
+    },
+    {
+      "t": 10,
+      "ok": 1342,
+      "errors": 0
+    },
+    {
+      "t": 11,
+      "ok": 1334,
+      "errors": 0
+    },
+    {
+      "t": 12,
+      "ok": 1324,
+      "errors": 0
+    },
+    {
+      "t": 13,
+      "ok": 1342,
+      "errors": 0
+    },
+    {
+      "t": 14,
+      "ok": 1217,
+      "errors": 0
+    },
+    {
+      "t": 15,
+      "ok": 16,
+      "errors": 0
+    }
+  ],
+  "correctness": "n/a"
+}
