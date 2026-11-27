@@ -121,3 +121,78 @@ func TestThreeNodeClusterReplicatesAndFailsOver(t *testing.T) {
 		t.Fatalf("range 1 leader after failover = %d (old %d)", newLeaders[1], old)
 	}
 }
+
+// TestPebbleNodeRecoversAfterRestart crashes a node of a Pebble-backed
+// cluster, writes while it is down, restarts it from the same data
+// directory, and checks it serves both old and new data.
+func TestPebbleNodeRecoversAfterRestart(t *testing.T) {
+	addrs := freeAddrs(t, 3)
+	peers := map[uint64]string{}
+	for i, a := range addrs {
+		peers[uint64(i+1)] = a
+	}
+	ranges := []multiraft.RangeDescriptor{{ID: 1, StartKey: "", EndKey: "m"}, {ID: 2, StartKey: "m"}}
+	dirs := map[uint64]string{}
+	cancels := map[uint64]context.CancelFunc{}
+	start := func(id uint64) {
+		node, err := NewNode(Config{NodeID: id, ListenAddr: peers[id], Peers: peers, Ranges: ranges, DataDir: dirs[id]})
+		if err != nil {
+			t.Fatalf("start node %d: %v", id, err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancels[id] = cancel
+		go func() { _ = node.Serve(ctx) }()
+	}
+	for id := range peers {
+		dirs[id] = t.TempDir()
+		start(id)
+	}
+	t.Cleanup(func() {
+		for _, c := range cancels {
+			c()
+		}
+		time.Sleep(200 * time.Millisecond) // let Pebble close before TempDir cleanup
+	})
+
+	c, err := client.New(addrs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	waitLeaders(t, c, 2)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := c.Put(ctx, []byte("apple"), []byte("red")); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Put(ctx, []byte("zebra"), []byte("stripes")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Crash node 3, write while it is down, then restart it from disk.
+	cancels[3]()
+	time.Sleep(500 * time.Millisecond)
+	if err := c.Put(ctx, []byte("banana"), []byte("yellow")); err != nil {
+		t.Fatalf("write with node 3 down: %v", err)
+	}
+	start(3)
+
+	// Node 3 alone must serve data written before and during its downtime.
+	only3, _ := client.New([]string{addrs[2]})
+	defer only3.Close()
+	deadline := time.Now().Add(10 * time.Second)
+	for _, kv := range [][2]string{{"apple", "red"}, {"zebra", "stripes"}, {"banana", "yellow"}} {
+		for {
+			gctx, gcancel := context.WithTimeout(ctx, time.Second)
+			v, found, err := only3.Get(gctx, []byte(kv[0]))
+			gcancel()
+			if err == nil && found && string(v) == kv[1] {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("restarted node: get %s = %q found=%v err=%v", kv[0], v, found, err)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}

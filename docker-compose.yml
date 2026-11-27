@@ -16,6 +16,7 @@ x-node: &node
     KV_PEERS: ${KV_PEERS:-1=kv1:7000,2=kv2:7000,3=kv3:7000}
     KV_SPLITS: ${KV_SPLITS:-m}
     KV_REQUEST_TIMEOUT: ${KV_REQUEST_TIMEOUT:-2s}
+    KV_DATA_DIR: ${KV_DATA_DIR:-/data}   # Pebble; set to "" for in-memory
   networks: [kvnet]
 
 services:

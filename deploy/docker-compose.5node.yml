@@ -15,6 +15,7 @@ services:
       KV_PEERS: ${KV_PEERS}
       KV_SPLITS: ${KV_SPLITS:-m}
       KV_REQUEST_TIMEOUT: ${KV_REQUEST_TIMEOUT:-2s}
+      KV_DATA_DIR: ${KV_DATA_DIR:-/data}
     ports: ["7004:7000"]
     networks: { kvnet: { ipv4_address: 172.28.0.14 } }
   kv5:
@@ -28,5 +29,6 @@ services:
       KV_PEERS: ${KV_PEERS}
       KV_SPLITS: ${KV_SPLITS:-m}
       KV_REQUEST_TIMEOUT: ${KV_REQUEST_TIMEOUT:-2s}
+      KV_DATA_DIR: ${KV_DATA_DIR:-/data}
     ports: ["7005:7000"]
     networks: { kvnet: { ipv4_address: 172.28.0.15 } }

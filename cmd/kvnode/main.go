@@ -4,7 +4,7 @@
 //	       --peers 1=kv1:7000,2=kv2:7000,3=kv3:7000 --splits m
 //
 // Every flag can also be set through an environment variable (KV_ID,
-// KV_LISTEN, KV_PEERS, KV_SPLITS, KV_REQUEST_TIMEOUT), which is what the
+// KV_LISTEN, KV_PEERS, KV_SPLITS, KV_REQUEST_TIMEOUT, KV_DATA_DIR), which is what the
 // Docker Compose deployment uses.
 package main
 
@@ -37,6 +37,7 @@ func main() {
 	listen := flag.String("listen", env("KV_LISTEN", ":7000"), "listen address")
 	peers := flag.String("peers", env("KV_PEERS", "1=localhost:7000"), "comma-separated id=host:port for all nodes, including this one")
 	splits := flag.String("splits", env("KV_SPLITS", "m"), "comma-separated split keys; N splits create N+1 ranges")
+	dataDir := flag.String("data-dir", env("KV_DATA_DIR", ""), "directory for Pebble storage (empty = in-memory)")
 	timeout := flag.Duration("request-timeout", mustDur(env("KV_REQUEST_TIMEOUT", "2s")), "per-request raft commit timeout")
 	flag.Parse()
 
@@ -53,6 +54,7 @@ func main() {
 		Peers:          peerMap,
 		Ranges:         RangesFromSplits(*splits),
 		RequestTimeout: *timeout,
+		DataDir:        *dataDir,
 	})
 	if err != nil {
 		log.Fatal(err)
