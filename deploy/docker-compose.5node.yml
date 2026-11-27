@@ -16,7 +16,9 @@ services:
       KV_SPLITS: ${KV_SPLITS:-m}
       KV_REQUEST_TIMEOUT: ${KV_REQUEST_TIMEOUT:-2s}
       KV_DATA_DIR: ${KV_DATA_DIR:-/data}
-    ports: ["7004:7000"]
+      KV_HTTP_LISTEN: ":8080"
+      KV_METADATA_URL: ${KV_METADATA_URL:-http://metadata:8080}
+    ports: ["7004:7000", "8084:8080"]
     networks: { kvnet: { ipv4_address: 172.28.0.14 } }
   kv5:
     image: kvstore:dev
@@ -30,5 +32,7 @@ services:
       KV_SPLITS: ${KV_SPLITS:-m}
       KV_REQUEST_TIMEOUT: ${KV_REQUEST_TIMEOUT:-2s}
       KV_DATA_DIR: ${KV_DATA_DIR:-/data}
-    ports: ["7005:7000"]
+      KV_HTTP_LISTEN: ":8080"
+      KV_METADATA_URL: ${KV_METADATA_URL:-http://metadata:8080}
+    ports: ["7005:7000", "8085:8080"]
     networks: { kvnet: { ipv4_address: 172.28.0.15 } }

@@ -17,6 +17,8 @@ x-node: &node
     KV_SPLITS: ${KV_SPLITS:-m}
     KV_REQUEST_TIMEOUT: ${KV_REQUEST_TIMEOUT:-2s}
     KV_DATA_DIR: ${KV_DATA_DIR:-/data}   # Pebble; set to "" for in-memory
+    KV_HTTP_LISTEN: ":8080"   # HTTP range API used by the metadata router
+    KV_METADATA_URL: ${KV_METADATA_URL:-http://metadata:8080}   # leader reports; harmless if the router is not running
   networks: [kvnet]
 
 services:
@@ -25,21 +27,21 @@ services:
     container_name: kv1
     hostname: kv1
     environment: { <<: *node-env, KV_ID: "1" }
-    ports: ["7001:7000"]
+    ports: ["7001:7000", "8081:8080"]
     networks: { kvnet: { ipv4_address: 172.28.0.11 } }
   kv2:
     <<: *node
     container_name: kv2
     hostname: kv2
     environment: { <<: *node-env, KV_ID: "2" }
-    ports: ["7002:7000"]
+    ports: ["7002:7000", "8082:8080"]
     networks: { kvnet: { ipv4_address: 172.28.0.12 } }
   kv3:
     <<: *node
     container_name: kv3
     hostname: kv3
     environment: { <<: *node-env, KV_ID: "3" }
-    ports: ["7003:7000"]
+    ports: ["7003:7000", "8083:8080"]
     networks: { kvnet: { ipv4_address: 172.28.0.13 } }
 
   # Client container for kvctl / kvbench. It sits on the same network, so

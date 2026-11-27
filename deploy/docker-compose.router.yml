@@ -1,0 +1,17 @@
+# Runs the Part 2 metadata router (Python) next to the KV nodes. Its code is
+# extracted from the team branch by deploy/router.sh into .router/.
+#   deploy/router.sh up      start router + register the range map
+#   kvctl --http-url http://metadata:8080 put apple red   (from tools)
+services:
+  metadata:
+    image: python:3.12-slim
+    container_name: metadata
+    working_dir: /app
+    command: ["python", "-m", "backend.cmd.metadata"]
+    environment:
+      METADATA_HTTP_ADDR: "0.0.0.0:8080"
+      RANGE_NODES: ${RANGE_NODES:-1=kv1:8080,2=kv2:8080,3=kv3:8080}
+      PYTHONUNBUFFERED: "1"
+    volumes: ["${ROUTER_DIR:-./.router/2-SharingAndMetadata}:/app"]
+    ports: ["18080:8080"]
+    networks: [kvnet]

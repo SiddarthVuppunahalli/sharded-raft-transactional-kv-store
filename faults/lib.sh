@@ -4,6 +4,7 @@ set -euo pipefail
 FAULTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$FAULTS_DIR/.." && pwd)"
 NODES="${NODES:-3}"
+export COMPOSE_IGNORE_ORPHANS=True   # the router runs from an overlay file
 
 compose() {
   if [[ "$NODES" == "5" ]]; then
