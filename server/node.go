@@ -45,6 +45,7 @@ type Config struct {
 	RequestTimeout time.Duration
 	HTTPListenAddr string                    // "" = no HTTP range API
 	HTTPPeers      map[uint64]string         // node id -> advertised HTTP host:port
+	MetadataURL    string                    // metadata service base URL; "" = do not report leaders
 	DataDir        string                    // "" = in-memory; otherwise Pebble per range under this dir
 	StateMachine   StateMachine              // nil = in-memory map (ignored when DataDir is set)
 	Txn            TxnHandler                // nil = Txn returns UNIMPLEMENTED
@@ -208,6 +209,10 @@ func (n *Node) Serve(ctx context.Context) error {
 			_ = hs.Close()
 		}()
 		log.Printf("node %d HTTP range API on %s", n.cfg.NodeID, n.cfg.HTTPListenAddr)
+	}
+	if n.cfg.MetadataURL != "" {
+		go newLeaderReporter(n, n.cfg.MetadataURL).run(ctx)
+		log.Printf("node %d reporting range leadership to %s", n.cfg.NodeID, n.cfg.MetadataURL)
 	}
 	log.Printf("node %d serving on %s with %d ranges, peers=%v", n.cfg.NodeID, n.cfg.ListenAddr, len(n.cfg.Ranges), n.cfg.Peers)
 	return n.grpc.Serve(lis)

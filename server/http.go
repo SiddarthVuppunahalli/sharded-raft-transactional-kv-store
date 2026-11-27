@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/SiddarthVuppunahalli/sharded-raft-transactional-kv-store/multiraft"
 )
@@ -229,6 +231,24 @@ func (n *Node) handleStats(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (n *Node) proxyMetadata(w http.ResponseWriter, r *http.Request, url string) bool {
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, resp.Body)
+	return true
+}
+
 func (n *Node) handleMetadata(w http.ResponseWriter, r *http.Request) {
 	id, ok := rangeIDParam(w, r)
 	if !ok {
@@ -239,8 +259,17 @@ func (n *Node) handleMetadata(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "stale_metadata", Detail: "unknown range", RangeID: id})
 		return
 	}
-	d := g.Descriptor()
 	st := g.Status()
+	// Only the leader sees replica health (Raft progress), so followers
+	// return the leader's view when they can reach it.
+	if st.Lead != 0 && st.Lead != n.cfg.NodeID && r.URL.Query().Get("local") == "" {
+		if addr, ok := n.cfg.HTTPPeers[st.Lead]; ok {
+			if n.proxyMetadata(w, r, "http://"+addr+"/_range/metadata?local=1&rangeId="+strconv.FormatUint(id, 10)) {
+				return
+			}
+		}
+	}
+	d := g.Descriptor()
 	out := rangeMetadata{RangeID: id, LeaderNodeID: st.Lead, MetadataVersion: 1}
 	if d.StartKey != "" {
 		s := d.StartKey

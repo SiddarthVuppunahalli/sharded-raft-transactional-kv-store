@@ -4,7 +4,7 @@
 //	       --peers 1=kv1:7000,2=kv2:7000,3=kv3:7000 --splits m
 //
 // Every flag can also be set through an environment variable (KV_ID,
-// KV_LISTEN, KV_PEERS, KV_SPLITS, KV_REQUEST_TIMEOUT, KV_DATA_DIR, KV_HTTP_LISTEN, KV_HTTP_PEERS), which is what the
+// KV_LISTEN, KV_PEERS, KV_SPLITS, KV_REQUEST_TIMEOUT, KV_DATA_DIR, KV_HTTP_LISTEN, KV_HTTP_PEERS, KV_METADATA_URL), which is what the
 // Docker Compose deployment uses.
 package main
 
@@ -41,6 +41,7 @@ func main() {
 	dataDir := flag.String("data-dir", env("KV_DATA_DIR", ""), "directory for Pebble storage (empty = in-memory)")
 	httpListen := flag.String("http-listen", env("KV_HTTP_LISTEN", ""), "HTTP range API listen address for the metadata router, e.g. :8080 (empty = disabled)")
 	httpPeers := flag.String("http-peers", env("KV_HTTP_PEERS", ""), "id=host:port HTTP addresses of all nodes (default: --peers hosts with the --http-listen port)")
+	metadataURL := flag.String("metadata-url", env("KV_METADATA_URL", ""), "metadata service base URL; when set, this node reports range leadership changes (set_leader)")
 	timeout := flag.Duration("request-timeout", mustDur(env("KV_REQUEST_TIMEOUT", "2s")), "per-request raft commit timeout")
 	flag.Parse()
 
@@ -78,6 +79,7 @@ func main() {
 		DataDir:        *dataDir,
 		HTTPListenAddr: *httpListen,
 		HTTPPeers:      httpPeerMap,
+		MetadataURL:    *metadataURL,
 	})
 	if err != nil {
 		log.Fatal(err)
