@@ -221,6 +221,24 @@ func (s *PebbleStorage) HasState() (bool, error) {
 	return !raft.IsEmptyHardState(hardState) || last > 0, nil
 }
 
+// KVStats returns the number of applied key-value records and their total
+// key+value size in bytes, used to decide when a range should split.
+func (s *PebbleStorage) KVStats() (keys int, bytes int64, err error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	upper := append(append([]byte{}, kvPrefix[:len(kvPrefix)-1]...), kvPrefix[len(kvPrefix)-1]+1)
+	iter, err := s.db.NewIter(&pebble.IterOptions{LowerBound: kvPrefix, UpperBound: upper})
+	if err != nil {
+		return 0, 0, err
+	}
+	defer iter.Close()
+	for iter.First(); iter.Valid(); iter.Next() {
+		keys++
+		bytes += int64(len(iter.Key())-len(kvPrefix)) + int64(len(iter.Value()))
+	}
+	return keys, bytes, iter.Error()
+}
+
 func (s *PebbleStorage) Get(key string) ([]byte, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
