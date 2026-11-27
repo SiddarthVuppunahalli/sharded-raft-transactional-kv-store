@@ -28,6 +28,7 @@ import (
 
 type options struct {
 	addrs       []string
+	httpURL     string
 	workload    string
 	duration    time.Duration
 	concurrency int
@@ -46,6 +47,7 @@ type options struct {
 func main() {
 	var o options
 	addrs := flag.String("addrs", envOr("KV_ADDRS", "localhost:7001,localhost:7002,localhost:7003"), "node addresses ordered by node id")
+	flag.StringVar(&o.httpURL, "http-url", envOr("KV_HTTP_URL", ""), "send requests through the metadata router's HTTP API at this base URL (e.g. http://metadata:8080) instead of gRPC nodes")
 	flag.StringVar(&o.workload, "workload", "kv", "kv | linear | bank")
 	flag.DurationVar(&o.duration, "duration", 30*time.Second, "how long to run")
 	flag.IntVar(&o.concurrency, "concurrency", 16, "concurrent client workers")
@@ -71,15 +73,25 @@ func main() {
 	}
 	defer c.Close()
 	ctx := context.Background()
-	_ = c.Refresh(ctx)
+	if o.httpURL == "" {
+		_ = c.Refresh(ctx)
+	}
 
+	var st store = c
+	if o.httpURL != "" {
+		st = client.NewHTTP(o.httpURL)
+	}
 	var res *Result
 	switch o.workload {
 	case "kv":
-		res = runKV(ctx, c, o)
+		res = runKV(ctx, st, o)
 	case "linear":
-		res = runLinear(ctx, c, o)
+		res = runLinear(ctx, st, o)
 	case "bank":
+		if o.httpURL != "" {
+			res = &Result{Correctness: "SKIPPED", Details: "the HTTP router API has no transaction endpoint", Timeline: []Second{}}
+			break
+		}
 		res = runBank(ctx, c, o)
 	default:
 		log.Fatalf("unknown workload %q", o.workload)

@@ -18,7 +18,18 @@ import (
 	"github.com/SiddarthVuppunahalli/sharded-raft-transactional-kv-store/client"
 )
 
+// store is the subset of operations the kv and linear workloads need. It is
+// satisfied by the gRPC client (direct to nodes) and the HTTP client
+// (through the Part 2 metadata router).
+type store interface {
+	Put(ctx context.Context, key, value []byte) error
+	Get(ctx context.Context, key []byte) ([]byte, bool, error)
+}
+
 func errKind(err error) string {
+	if h, ok := client.IsHTTPError(err); ok {
+		return fmt.Sprintf("HTTP%d", h.Status)
+	}
 	if s, ok := status.FromError(err); ok {
 		return s.Code().String()
 	}
@@ -54,7 +65,7 @@ func runWorkers(ctx context.Context, o options, fn func(ctx context.Context, wor
 
 // ---------------------------------------------------------------- kv
 
-func runKV(ctx context.Context, c *client.Client, o options) *Result {
+func runKV(ctx context.Context, c store, o options) *Result {
 	rec := NewRecorder()
 	value := make([]byte, o.valueSize)
 	for i := range value {
@@ -131,7 +142,7 @@ var kvModel = porcupine.Model{
 	},
 }
 
-func runLinear(ctx context.Context, c *client.Client, o options) *Result {
+func runLinear(ctx context.Context, c store, o options) *Result {
 	rec := NewRecorder()
 	base := time.Now()
 	var mu sync.Mutex

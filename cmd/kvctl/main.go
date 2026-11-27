@@ -20,6 +20,7 @@ import (
 func main() {
 	addrs := flag.String("addrs", envOr("KV_ADDRS", "localhost:7001,localhost:7002,localhost:7003"), "comma-separated node addresses ordered by node id")
 	timeout := flag.Duration("timeout", 5*time.Second, "overall command timeout")
+	httpURL := flag.String("http-url", envOr("KV_HTTP_URL", ""), "use the metadata router's HTTP API at this base URL for get/put")
 	flag.Parse()
 	args := flag.Args()
 	if len(args) == 0 {
@@ -32,6 +33,28 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
 	_ = c.Refresh(ctx)
+
+	if *httpURL != "" {
+		h := client.NewHTTP(*httpURL)
+		switch args[0] {
+		case "put":
+			need(args, 3)
+			check(h.Put(ctx, []byte(args[1]), []byte(args[2])))
+			fmt.Println("OK")
+		case "get":
+			need(args, 2)
+			v, found, err := h.Get(ctx, []byte(args[1]))
+			check(err)
+			if !found {
+				fmt.Println("(not found)")
+				os.Exit(2)
+			}
+			fmt.Println(string(v))
+		default:
+			check(fmt.Errorf("only get and put are available with --http-url"))
+		}
+		return
+	}
 
 	switch args[0] {
 	case "put":
