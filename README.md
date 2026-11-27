@@ -40,14 +40,20 @@ flowchart TB
 
 Each range has three replicas and commits through a Raft majority. The metadata service stores the key-range map and allocates transaction timestamps; the router uses that map to find current leaders. Range splits and replica movement update the map as shards are balanced across nodes. For a cross-range transaction, the coordinator asks each participating leader to durably prepare; it then stores the final decision in the replicated metadata service before telling participants to commit or abort. After a crash, the coordinator replays that decision to finish any incomplete transaction. A range cannot accept new writes without a quorum, and prepared transactions may wait while the coordinator is unavailable.
 
-## Proposed Technology Used
+## Repository Layout
 
-| Component | Proposed technology | Purpose |
+- `backend/` contains the Python metadata service, SQLite state machine, Raft HTTP transport, and client API.
+- `frontend/` contains the separate browser application and its Python development server.
+- `2-SharingAndMetadata/URLs.txt` documents the API paths, inputs, responses, and current implementation status.
+
+## Current Metadata Prototype Technology
+
+| Component | Technology | Purpose |
 | --- | --- | --- |
-| Service implementation | Go | Concurrency and network services |
-| Inter-node communication | gRPC and Protocol Buffers | Typed APIs for routing, Raft transport, and transaction messages |
-| Consensus | `go.etcd.io/raft/v3` | Separate Raft state machines for each key range and replicated metadata |
-| Local storage | Pebble | Persistent Raft state and versioned key-value records |
-| Deployment | Docker Compose | Reproducible multi-node development and failure experiments |
-| Evaluation | Go tests and fault-injection scripts | Check transaction correctness, throughput, latency, and recovery under crashes and partitions |
+| Service implementation | Python 3.10+ | HTTP services and concurrency |
+| Metadata consensus transport | Python standard-library HTTP | Raft vote and append RPCs between metadata replicas |
+| Metadata persistence | SQLite in WAL mode with synchronous writes | Durable Raft log and applied range map |
+| Frontend development server | Python standard library | Serves the browser UI separately and proxies API calls |
+
+The current Python prototype covers the metadata control plane. Range Raft services, MVCC, transactions, Docker deployment, and evaluation tooling remain project work. See [URLs.txt](2-SharingAndMetadata/URLs.txt) for commands and endpoint details.
 

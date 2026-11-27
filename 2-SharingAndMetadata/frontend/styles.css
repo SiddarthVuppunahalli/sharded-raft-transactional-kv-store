@@ -1,0 +1,36 @@
+/* Layout only; use the browser's default appearance. */
+body { margin: 0; }
+
+.page {
+  width: min(1100px, calc(100% - 32px));
+  margin: 48px auto;
+}
+
+.page-header, .section-heading, .lookup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.page-header { margin-bottom: 24px; }
+.eyebrow { margin: 0 0 8px; }
+h1 { margin: 0; }
+.subtitle { margin: 8px 0 0; }
+.panel { margin-top: 20px; padding: 22px; }
+h2 { margin: 0 0 16px; }
+label { display: block; margin-bottom: 8px; }
+input { min-width: 0; flex: 1; }
+.status { min-height: 20px; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; text-align: left; }
+th, td { padding: 12px 10px; white-space: nowrap; }
+.empty { padding: 22px 10px; text-align: center; }
+.result { overflow-x: auto; margin: 16px 0 0; padding: 14px; }
+
+@media (max-width: 600px) {
+  .page { margin-top: 26px; }
+  .page-header { align-items: flex-start; }
+  .panel { padding: 17px; }
+  .lookup-row { align-items: stretch; flex-direction: column; }
+}

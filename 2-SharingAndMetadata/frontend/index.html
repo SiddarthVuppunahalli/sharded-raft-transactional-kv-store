@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Sharing & Metadata</title>
+    <link rel="stylesheet" href="styles.css?v=plain" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">Sharing & Metadata</p>
+          <p class="subtitle">Inspect the key ranges, replicas, and known leaders.</p>
+        </div>
+        <button id="refresh-button" type="button">Refresh</button>
+      </header>
+
+      <p id="status" class="status" role="status">Loading metadata...</p>
+
+      <section>
+        <form id="lookup-form">
+          <label for="key-input">Key</label>
+          <div class="lookup-row">
+            <input id="key-input" name="key"/>
+            <button type="submit">Find range</button>
+          </div>
+        </form>
+        <pre id="lookup-result" class="result" hidden></pre>
+      </section>
+
+      <section class="panel" aria-labelledby="ranges-heading">
+        <div class="section-heading">
+          <h2 id="ranges-heading">Known ranges</h2>
+          <span id="version" class="version"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Range</th>
+                <th>Start key</th>
+                <th>End key</th>
+                <th>Replicas</th>
+                <th>Leader</th>
+              </tr>
+            </thead>
+            <tbody id="ranges-body">
+              <tr><td colspan="5" class="empty">Waiting for metadata…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+    <script src="app.js" defer></script>
+  </body>
+</html>
