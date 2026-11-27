@@ -4,7 +4,7 @@
 //	       --peers 1=kv1:7000,2=kv2:7000,3=kv3:7000 --splits m
 //
 // Every flag can also be set through an environment variable (KV_ID,
-// KV_LISTEN, KV_PEERS, KV_SPLITS, KV_REQUEST_TIMEOUT, KV_DATA_DIR), which is what the
+// KV_LISTEN, KV_PEERS, KV_SPLITS, KV_REQUEST_TIMEOUT, KV_DATA_DIR, KV_HTTP_LISTEN, KV_HTTP_PEERS), which is what the
 // Docker Compose deployment uses.
 package main
 
@@ -13,6 +13,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"sort"
@@ -38,6 +39,8 @@ func main() {
 	peers := flag.String("peers", env("KV_PEERS", "1=localhost:7000"), "comma-separated id=host:port for all nodes, including this one")
 	splits := flag.String("splits", env("KV_SPLITS", "m"), "comma-separated split keys; N splits create N+1 ranges")
 	dataDir := flag.String("data-dir", env("KV_DATA_DIR", ""), "directory for Pebble storage (empty = in-memory)")
+	httpListen := flag.String("http-listen", env("KV_HTTP_LISTEN", ""), "HTTP range API listen address for the metadata router, e.g. :8080 (empty = disabled)")
+	httpPeers := flag.String("http-peers", env("KV_HTTP_PEERS", ""), "id=host:port HTTP addresses of all nodes (default: --peers hosts with the --http-listen port)")
 	timeout := flag.Duration("request-timeout", mustDur(env("KV_REQUEST_TIMEOUT", "2s")), "per-request raft commit timeout")
 	flag.Parse()
 
@@ -48,6 +51,24 @@ func main() {
 	if _, ok := peerMap[*id]; !ok {
 		log.Fatalf("node id %d is not in --peers", *id)
 	}
+	httpPeerMap := map[uint64]string{}
+	if *httpPeers != "" {
+		if httpPeerMap, err = parsePeers(*httpPeers); err != nil {
+			log.Fatal(err)
+		}
+	} else if *httpListen != "" {
+		_, port, err := net.SplitHostPort(*httpListen)
+		if err != nil {
+			log.Fatalf("bad --http-listen %q: %v", *httpListen, err)
+		}
+		for id, addr := range peerMap {
+			host, _, err := net.SplitHostPort(addr)
+			if err != nil {
+				log.Fatalf("bad peer address %q: %v", addr, err)
+			}
+			httpPeerMap[id] = net.JoinHostPort(host, port)
+		}
+	}
 	node, err := server.NewNode(server.Config{
 		NodeID:         *id,
 		ListenAddr:     *listen,
@@ -55,6 +76,8 @@ func main() {
 		Ranges:         RangesFromSplits(*splits),
 		RequestTimeout: *timeout,
 		DataDir:        *dataDir,
+		HTTPListenAddr: *httpListen,
+		HTTPPeers:      httpPeerMap,
 	})
 	if err != nil {
 		log.Fatal(err)

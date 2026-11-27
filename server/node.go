@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -42,6 +43,8 @@ type Config struct {
 	Peers          map[uint64]string // node id -> advertised address (includes self)
 	Ranges         []multiraft.RangeDescriptor
 	RequestTimeout time.Duration
+	HTTPListenAddr string                    // "" = no HTTP range API
+	HTTPPeers      map[uint64]string         // node id -> advertised HTTP host:port
 	DataDir        string                    // "" = in-memory; otherwise Pebble per range under this dir
 	StateMachine   StateMachine              // nil = in-memory map (ignored when DataDir is set)
 	Txn            TxnHandler                // nil = Txn returns UNIMPLEMENTED
@@ -189,6 +192,23 @@ func (n *Node) Serve(ctx context.Context) error {
 		n.groupsWG.Wait()
 		n.closeStorages()
 	}()
+	if n.cfg.HTTPListenAddr != "" {
+		hs := &http.Server{Addr: n.cfg.HTTPListenAddr, Handler: n.HTTPHandler(), ReadHeaderTimeout: 5 * time.Second}
+		hl, err := net.Listen("tcp", n.cfg.HTTPListenAddr)
+		if err != nil {
+			return err
+		}
+		go func() {
+			if err := hs.Serve(hl); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Printf("http range API stopped: %v", err)
+			}
+		}()
+		go func() {
+			<-ctx.Done()
+			_ = hs.Close()
+		}()
+		log.Printf("node %d HTTP range API on %s", n.cfg.NodeID, n.cfg.HTTPListenAddr)
+	}
 	log.Printf("node %d serving on %s with %d ranges, peers=%v", n.cfg.NodeID, n.cfg.ListenAddr, len(n.cfg.Ranges), n.cfg.Peers)
 	return n.grpc.Serve(lis)
 }
@@ -315,6 +335,20 @@ type MemoryStateMachine struct {
 
 func NewMemoryStateMachine() *MemoryStateMachine {
 	return &MemoryStateMachine{data: make(map[string][]byte)}
+}
+
+// RangeStats counts keys (and their bytes) that fall inside desc.
+func (m *MemoryStateMachine) RangeStats(desc multiraft.RangeDescriptor) (int, int64) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	keys, bytes := 0, int64(0)
+	for k, v := range m.data {
+		if desc.Contains(k) {
+			keys++
+			bytes += int64(len(k) + len(v))
+		}
+	}
+	return keys, bytes
 }
 
 func (m *MemoryStateMachine) Apply(_ uint64, _ uint64, cmd multiraft.Command) ([]byte, bool) {

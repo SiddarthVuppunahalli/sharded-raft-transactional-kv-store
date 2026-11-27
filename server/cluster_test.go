@@ -27,6 +27,7 @@ func freeAddrs(t *testing.T, n int) []string {
 type testCluster struct {
 	addrs   []string
 	cancels map[uint64]context.CancelFunc
+	nodes   map[uint64]*Node
 }
 
 func startCluster(t *testing.T, n int) *testCluster {
@@ -37,7 +38,7 @@ func startCluster(t *testing.T, n int) *testCluster {
 		peers[uint64(i+1)] = a
 	}
 	ranges := []multiraft.RangeDescriptor{{ID: 1, StartKey: "", EndKey: "m"}, {ID: 2, StartKey: "m"}}
-	tc := &testCluster{addrs: addrs, cancels: map[uint64]context.CancelFunc{}}
+	tc := &testCluster{addrs: addrs, cancels: map[uint64]context.CancelFunc{}, nodes: map[uint64]*Node{}}
 	for id := range peers {
 		node, err := NewNode(Config{NodeID: id, ListenAddr: peers[id], Peers: peers, Ranges: ranges})
 		if err != nil {
@@ -45,6 +46,7 @@ func startCluster(t *testing.T, n int) *testCluster {
 		}
 		ctx, cancel := context.WithCancel(context.Background())
 		tc.cancels[id] = cancel
+		tc.nodes[id] = node
 		go func() { _ = node.Serve(ctx) }()
 	}
 	t.Cleanup(func() {
