@@ -123,7 +123,47 @@ Quick run on Pebble ([`sample-results-pebble/summary.md`](sample-results-pebble/
 
 The throughput drop comes from durability. `PebbleStorage` calls `fsync` (`pebble.Sync`) for every log entry, hard-state update and applied write. Writing each Raft `Ready` batch with one synced Pebble batch would win most of it back.
 
-**Through the metadata router (Part 2).** Pass `--http-url` to send requests through Pranav's `GET/PUT /api/kv` instead of straight to the nodes. For example: `kvbench --http-url http://metadata:8080 --workload linear`. The router forwards to each range leader's `POST /_range/execute`, so this mode needs the node-side HTTP receiver.
+## Integration with the metadata router (Part 2)
+
+The nodes serve the HTTP range API agreed with Pranav and Mukesh, and Pranav's router runs next to the cluster:
+
+```bash
+docker compose up -d --build
+deploy/router.sh up              # starts Part 2's router from its branch and registers the ranges
+docker compose run --rm tools kvctl --http-url http://metadata:8080 put apple red
+docker compose run --rm tools kvctl --http-url http://metadata:8080 get apple
+curl -X PUT --data red 'http://localhost:18080/api/kv?key=apple'   # same API from your Mac
+SCENARIOS=router QUICK=1 eval/run_eval.sh                          # evaluate through the router
+```
+
+### HTTP range API (served by every node on :8080; host ports 8081–8083)
+
+| Endpoint | Request | Response |
+|---|---|---|
+| `POST /_range/execute` | `{"operation":"get"\|"put"\|"delete","rangeId":1,"key":"apple","value":"red","metadataVersion":1}` | `{"rangeId":1,"operation":"put","key":"apple","value":"red","found":true,"committed":true,"leaderId":2,"leaderNodeId":2,"metadataVersion":1,"raftIndex":12}`. A GET miss returns `found:false` and `value:null`; PUT always returns `found:true`. |
+| `GET /_range/stats?rangeId=1` | | `{"rangeId":1,"keyCount":100,"sizeBytes":2048,"logEntries":245,"commitIndex":245,"appliedIndex":245,"leaderNodeId":2,"replicaCount":3}` |
+| `GET /_range/metadata?rangeId=1` | | `{"rangeId":1,"startKey":null,"endKey":"m","leaderNodeId":2,"metadataVersion":1,"replicas":[{"nodeId":1,"apiUrl":"http://kv1:8080","role":"follower","healthy":true}, …]}`. Followers return the leader's view, since only the leader knows replica health. |
+
+Errors return `{"error": …}`, which the router acts on:
+
+| Error | HTTP status | Meaning |
+|---|---|---|
+| `not_leader` | 409 | This node isn't the range leader; `leaderId` says which node is. |
+| `stale_metadata` | 409 | Unknown range, or the key is outside it; refresh the range map. |
+| `no_leader` | 503 | The range has no elected leader or no quorum. |
+| `timeout` | 504 | The outcome is unknown; the write may still commit. |
+
+**Leader reporting.** With `KV_METADATA_URL`, a node that becomes leader of a range proposes `set_leader` to the metadata service. Without it, after a leader crash the router kept sending to the dead node, which can never reply `not_leader`, so every request failed with 503 until someone fixed the map by hand.
+
+### Results through the router (Pebble, 3 nodes, QUICK run)
+
+From [`sample-results-router/summary.md`](sample-results-router/summary.md):
+
+| Scenario | Ops/s | Failed ops | p50 / p99 (ms) | Max unavailability | Correctness |
+|---|---:|---:|---:|---:|---|
+| Mixed 50/50 | 1,301 | 0 | 11 / 18 | 15 ms | |
+| Leader crash during load | 1,171 | 0 | 11 / 20 | 0.9 s | |
+| Random crashes, partitions and delays | 848 | 0 | 8 / 13 | 2.0 s | Linearizable (25,460 ops) |
 
 ## Known limitations (depend on the other parts)
 
