@@ -1,0 +1,111 @@
+{
+  "label": "linearizability-clean",
+  "workload": "linear",
+  "concurrency": 8,
+  "duration_sec": 15.021577965,
+  "ok": 5975,
+  "errors": 0,
+  "throughput_ops_per_sec": 397.76114160054556,
+  "read": {
+    "count": 2942,
+    "mean_ms": 19.372966009517334,
+    "p50_ms": 18.821,
+    "p95_ms": 27.462,
+    "p99_ms": 35.26,
+    "max_ms": 56.3
+  },
+  "write": {
+    "count": 3033,
+    "mean_ms": 20.774950214309282,
+    "p50_ms": 20.316,
+    "p95_ms": 29.371,
+    "p99_ms": 36.264,
+    "max_ms": 55.368
+  },
+  "max_unavailability_ms": 30,
+  "max_unavailability_at_sec": 14.111578465,
+  "timeline": [
+    {
+      "t": 0,
+      "ok": 329,
+      "errors": 0
+    },
+    {
+      "t": 1,
+      "ok": 365,
+      "errors": 0
+    },
+    {
+      "t": 2,
+      "ok": 429,
+      "errors": 0
+    },
+    {
+      "t": 3,
+      "ok": 430,
+      "errors": 0
+    },
+    {
+      "t": 4,
+      "ok": 351,
+      "errors": 0
+    },
+    {
+      "t": 5,
+      "ok": 335,
+      "errors": 0
+    },
+    {
+      "t": 6,
+      "ok": 334,
+      "errors": 0
+    },
+    {
+      "t": 7,
+      "ok": 448,
+      "errors": 0
+    },
+    {
+      "t": 8,
+      "ok": 556,
+      "errors": 0
+    },
+    {
+      "t": 9,
+      "ok": 513,
+      "errors": 0
+    },
+    {
+      "t": 10,
+      "ok": 377,
+      "errors": 0
+    },
+    {
+      "t": 11,
+      "ok": 366,
+      "errors": 0
+    },
+    {
+      "t": 12,
+      "ok": 320,
+      "errors": 0
+    },
+    {
+      "t": 13,
+      "ok": 396,
+      "errors": 0
+    },
+    {
+      "t": 14,
+      "ok": 418,
+      "errors": 0
+    },
+    {
+      "t": 15,
+      "ok": 8,
+      "errors": 0
+    }
+  ],
+  "correctness": "OK",
+  "details": "linearizability check over 5975 operations on 8 keys"
+}

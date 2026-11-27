@@ -108,8 +108,24 @@ Full data: [`sample-results/summary.md`](sample-results/summary.md). Download [`
 - **Linearizability:** porcupine verified about 234k operations without faults and about 241k operations under random crashes, partitions and delays. No violations found.
 - **Transactions:** `SKIPPED` until Part 3 registers the `Txn` handler.
 
+## Durable mode (Pebble) and the HTTP router
+
+**Pebble is now the default.** The Docker cluster stores each range in Mukesh's Pebble storage under `/data` (`KV_DATA_DIR`; set it to an empty string for in-memory). A crashed container restarts from disk, and the `TestPebbleNodeRecoversAfterRestart` integration test covers this.
+
+Quick run on Pebble ([`sample-results-pebble/summary.md`](sample-results-pebble/summary.md)):
+
+| | In-memory | Pebble |
+|---|---:|---:|
+| Read-heavy throughput (16 clients) | ~26,300 ops/s | ~1,330 ops/s |
+| Write-heavy p50 latency | 0.6 ms | 35 ms |
+| Leader crash → first write | ~1.7 s | ~1.9 s |
+| Linearizability under chaos | OK | OK |
+
+The throughput drop comes from durability. `PebbleStorage` calls `fsync` (`pebble.Sync`) for every log entry, hard-state update and applied write. Writing each Raft `Ready` batch with one synced Pebble batch would win most of it back.
+
+**Through the metadata router (Part 2).** Pass `--http-url` to send requests through Pranav's `GET/PUT /api/kv` instead of straight to the nodes. For example: `kvbench --http-url http://metadata:8080 --workload linear`. The router forwards to each range leader's `POST /_range/execute`, so this mode needs the node-side HTTP receiver.
+
 ## Known limitations (depend on the other parts)
 
-- **State is in memory until Part 1 lands Pebble.** A restarted node rejoins and catches up from the leader's log, but a crash of every node loses data, and a restarted node forgets its Raft vote. In production that would be a safety issue, and Pebble's persisted HardState fixes it.
-- **Raft log snapshots/compaction aren't implemented.** The log grows in memory, so the eval runner restarts the cluster between scenarios.
+- **Raft log snapshots/compaction aren't implemented.** The log grows without limit, so the eval runner starts fresh containers for each scenario.
 - **Ranges are static, from `KV_SPLITS`.** Range splits and replica movement come from Part 2.
