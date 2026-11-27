@@ -239,7 +239,9 @@ def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int,
                 error = result.get("error")
                 if error in ("stale_metadata", "not_leader"):
                     if error == "not_leader":
-                        new_leader = result.get("leaderId", 0)
+                        new_leader = result.get("leaderNodeId", result.get("leaderId", 0))
+                        if "leaderNodeId" in result and "leaderId" in result and result["leaderId"] != new_leader:
+                            raise APIError(502, "range service returned conflicting leader IDs")
                         if type(new_leader) is not int or new_leader < 0:
                             raise APIError(502, "range service returned an invalid leader ID")
                         if new_leader == leader:
@@ -263,10 +265,13 @@ def make_api_handler(node: RaftNode, store: MetadataStore, http_peers: dict[int,
                     raise APIError(status, str(error or f"range service returned HTTP {response_status}"))
                 if error:
                     raise APIError(503, str(error))
-                if type(result.get("found")) is not bool:
-                    raise APIError(502, "range service returned an invalid result")
-                if operation == "put" and not result["found"]:
-                    raise APIError(502, "range service did not confirm the write")
+                if result.get("committed") is not True:
+                    raise APIError(502, "range service did not confirm Raft commitment")
+                for field, expected in (("rangeId", descriptor["id"]), ("operation", operation), ("key", key)):
+                    if field in result and result[field] != expected:
+                        raise APIError(502, f"range service returned a mismatched {field}")
+                if operation == "get" and type(result.get("found")) is not bool:
+                    raise APIError(502, "range service returned an invalid read result")
                 if operation == "put":
                     self.send_bytes(204, b"", "application/octet-stream")
                 elif not result.get("found", False):

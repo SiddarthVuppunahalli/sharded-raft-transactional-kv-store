@@ -12,6 +12,8 @@ The frontend shows the range map and lets you look up a key.
 Metadata uses its own Raft group and SQLite database in `data/metadata/`.
 The default is one replica for local development. See [URLs.txt](URLs.txt) for three replicas.
 
-[HandOff.txt](HandOff.txt) explains the team integration. [URLs.txt](URLs.txt) lists the seven supported API calls. Keys, boundaries and values are plain UTF-8 text.
+[URLs.txt](URLs.txt) lists the seven supported API calls. Keys, boundaries and values are plain UTF-8 text.
+
+Range stats, registration commands, and deployment integration notes are in [URLs.txt](URLs.txt).
 
 Checks: `py -B -m unittest discover -s tests -v`
