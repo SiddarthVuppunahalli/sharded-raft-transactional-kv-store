@@ -203,7 +203,7 @@ func (n *Node) propose(ctx context.Context, cmd multiraft.Command) (applyResult,
 	// etcd/raft blocks proposals (rather than failing them) while a replica
 	// knows no leader, e.g. when it is partitioned away. Fail fast so the
 	// client can retry on a replica that can reach the quorum.
-	if g.Leader() == raft.None {
+	if g.LeaderID() == raft.None {
 		return applyResult{}, g, errNoLeader
 	}
 	if err := g.Propose(ctx, cmd); err != nil {
