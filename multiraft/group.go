@@ -16,6 +16,50 @@ type Transport interface {
 	Send(context.Context, raftpb.Message) error
 }
 
+// MemoryTransport delivers Raft messages between groups in the same process.
+// It is useful for deterministic tests and local development; a production
+// deployment can replace it with a network-backed Transport.
+type MemoryTransport struct {
+	mu    sync.RWMutex
+	nodes map[uint64]raft.Node
+}
+
+func NewMemoryTransport() *MemoryTransport {
+	return &MemoryTransport{nodes: make(map[uint64]raft.Node)}
+}
+
+func (t *MemoryTransport) Register(nodeID uint64, node raft.Node) error {
+	if nodeID == 0 || node == nil {
+		return fmt.Errorf("node id and node must be set")
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if _, exists := t.nodes[nodeID]; exists {
+		return fmt.Errorf("node %d is already registered", nodeID)
+	}
+	t.nodes[nodeID] = node
+	return nil
+}
+
+func (t *MemoryTransport) Unregister(nodeID uint64) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	delete(t.nodes, nodeID)
+}
+
+func (t *MemoryTransport) Send(ctx context.Context, message raftpb.Message) error {
+	if message.To == 0 {
+		return fmt.Errorf("raft message has no recipient")
+	}
+	t.mu.RLock()
+	node, ok := t.nodes[message.To]
+	t.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("raft recipient %d is not registered", message.To)
+	}
+	return node.Step(ctx, message)
+}
+
 // Applied is emitted after a committed command has been decoded and applied.
 type Applied struct {
 	RangeID uint64
@@ -28,6 +72,7 @@ type Applied struct {
 // for a single key range. The manager creates one Group per range descriptor.
 type Group struct {
 	descriptor RangeDescriptor
+	nodeID     uint64
 	node       raft.Node
 	storage    raft.Storage
 	transport  Transport
@@ -82,18 +127,68 @@ func NewGroup(config GroupConfig) (*Group, error) {
 		node = raft.StartNode(raftConfig, config.Peers)
 	}
 
-	return &Group{
+	group := &Group{
 		descriptor: config.Descriptor,
+		nodeID:     config.NodeID,
 		node:       node,
 		storage:    config.Storage,
 		transport:  config.Transport,
 		applied:    config.Applied,
-	}, nil
+	}
+	if len(config.Peers) > 0 {
+		if persistent, ok := config.Storage.(interface {
+			SetConfState(raftpb.ConfState) error
+		}); ok {
+			confState := raftpb.ConfState{}
+			for _, peer := range config.Peers {
+				confState.Voters = append(confState.Voters, peer.ID)
+			}
+			if err := persistent.SetConfState(confState); err != nil {
+				node.Stop()
+				return nil, fmt.Errorf("persist range %d membership: %w", config.Descriptor.ID, err)
+			}
+		}
+	}
+	if memoryTransport, ok := config.Transport.(*MemoryTransport); ok {
+		if err := memoryTransport.Register(config.NodeID, node); err != nil {
+			node.Stop()
+			return nil, err
+		}
+	}
+	return group, nil
 }
 
 func (g *Group) Descriptor() RangeDescriptor { return g.descriptor }
 
 func (g *Group) Applied() <-chan Applied { return g.applied }
+
+// NodeID returns the Raft node ID for this group.
+func (g *Group) NodeID() uint64 { return g.nodeID }
+
+// LeaderID returns the leader observed by this node. It returns zero before
+// an election has completed or when the node has no current leader.
+func (g *Group) LeaderID() uint64 { return g.node.Status().Lead }
+
+func (g *Group) IsLeader() bool { return g.LeaderID() == g.nodeID }
+
+// Get reads a value from the local applied state machine. Callers that need a
+// linearizable read should first route to the current leader and use the
+// application's read-index protocol; this MVP exposes committed local reads.
+func (g *Group) Get(key string) ([]byte, bool, error) {
+	if key == "" {
+		return nil, false, fmt.Errorf("key must not be empty")
+	}
+	if !g.descriptor.Contains(key) {
+		return nil, false, fmt.Errorf("key %q is outside range %d", key, g.descriptor.ID)
+	}
+	stateMachine, ok := g.storage.(interface {
+		Get(string) ([]byte, bool, error)
+	})
+	if !ok {
+		return nil, false, fmt.Errorf("range %d storage does not support reads", g.descriptor.ID)
+	}
+	return stateMachine.Get(key)
+}
 
 func (g *Group) Propose(ctx context.Context, command Command) error {
 	if command.Key == "" {
@@ -175,6 +270,11 @@ func (g *Group) handleReady(ctx context.Context, ready raft.Ready) error {
 		if err != nil {
 			return fmt.Errorf("decode committed command at index %d: %w", entry.Index, err)
 		}
+		if stateMachine, ok := g.storage.(interface{ Apply(Command) error }); ok {
+			if err := stateMachine.Apply(command); err != nil {
+				return fmt.Errorf("apply range %d command at index %d: %w", g.descriptor.ID, entry.Index, err)
+			}
+		}
 		select {
 		case g.applied <- Applied{RangeID: g.descriptor.ID, Index: entry.Index, Term: entry.Term, Command: command}:
 		case <-ctx.Done():
@@ -193,4 +293,7 @@ func (g *Group) Stop() {
 	}
 	g.closed = true
 	g.node.Stop()
+	if memoryTransport, ok := g.transport.(*MemoryTransport); ok {
+		memoryTransport.Unregister(g.nodeID)
+	}
 }
